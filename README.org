@@ -62,14 +62,15 @@ Make sure you load consult (e.g. =require 'consult=) before you load consult-web
 
 
 ** Adding Search Sources
-*** load all default sources at once
+*** Loading Sources
+**** load all default sources at once
 You can add search *ALL* the default sources by loading the provided =consult-web-sources= module:
 #+begin_src emacs-lisp
 (require 'consult-web-sources)
 #+end_src
 This provides sources for some popular services, and adds a long list of interactive commands (dynamic search, static search or both depending on the source). Over time I hope to add more services, hopefully by contribution from the community as well. Note that these are also good examples for you to learn how to add your own sources or tweek the current ones for your specific use-cases.
 
-*** load a single source
+**** load a single source
 Alternatively you can load a single source by just reuqiring the corresponding file. For example for google, you can do:
 #+begin_src emacs-lisp
 (require 'consult-web-google)
@@ -77,7 +78,7 @@ Alternatively you can load a single source by just reuqiring the corresponding f
 #+end_src
 This would add interactive commands only for searching google (e.g. =consult-web-google= and =consult-web-dynamic-google=).
 
-*** load multiple sources but not all
+**** load multiple sources but not all
 You can also load multiple sources (but not all) by setting the list =consult-web-sources-modules-to-load= and then loading =consult-web-sources=;
 #+begin_src emacs-lisp
 (setq consult-web-sources-modules-to-load '(consult-web-google consult-web-wikipedia))
@@ -110,6 +111,47 @@ This limits the sources that =consult-web-sources= loads to ONLY those defined i
 |--------------------------+-------------------------|
 
 **** Web Search Sources
+***** Bing
+Microsoft Azure cloud services include Bings Search API. You need to make an account and get an API Key. Follow the official documents here:  [[https://www.microsoft.com/en-us/bing/apis][Bing Search APIs | Microsoft Bing]] to get started. Once you have an API key, you can set it up in consult-web using the following variables;
+#+begin_src emacs-lisp
+(require 'consult-web-bing)
+(setq consult-web-bing-api-key "YOUR-BING-API-KEY-OR-FUNCTION")
+(add-to-list 'consult-web-dynamic-sources "Bing")  ;; or (add-to-list 'consult-web-multi-sources...)
+#+end_src
+***** Brave
+Brave provides a very good and easy-to-use API with reasonable limits and is one of my favorites when it comes to programmatic search. For API documentaiont refer to the official website: [[https://brave.com/search/api/][Brave Search API]]. Once you sign up and create an account you can access the documentation and create an API key. This API key can then be set in consult-web in the following custom variable. For a more secure approach you can pass a function that retrives the key to this variable:
+
+#+begin_src emacs-lisp
+(require 'consult-web-brave)
+(setq consult-web-brave-api-key "YOUR-BRAVE-API-KEY-OR-FUNCTION")
+(add-to-list 'consult-web-dynamic-sources "Brave")  ;; or (add-to-list 'consult-web-multi-sources...)
+#+end_src
+
+***** Brave Autosuggest
+[[https://api.search.brave.com/res/v1/suggest/search][Brave AutoSuggest API]], provides completion for search terms. You need to subscribe to autosuggest plan and create an API key specifically for the autosuggest service. Follow the official documentation here: [[https://brave.com/search/api/][Brave Search API]] and once you have an API key for autosuggest, you can set it in consult-web in the following custom variable. For a more secure approach you can pass a function that retrieves the key to this variable:
+#+begin_src emacs-lisp
+(require 'consult-web-brave-autosuggest)
+(setq consult-web-brave-autosuggest-api-key "YOUR-BRAVE-AUTOSUGGEST-API-KEY-OR-FUNCTION")
+(setq consult-web-default-autosuggest-command #'consult-web-dynamic-brave-autosuggest)
+#+end_src
+
+***** DOI.org
+DOI.org allows you to get the target url for DOI strings (for example for academic literature. You can use the this source if you want to enter the DOI and get the target link. )consult-web uses this i the backend to get target links for paper found on scopus. If you want interactive commands for the DOI.org service, you can use also use this source by:
+
+#+begin_src emacs-lisp
+(require 'consult-web-doi)
+#+end_src
+
+and then run =consult-web-dynamic-doiorg= or use =consult-web--doi-to-url= function.
+
+***** DuckDuckGo Limited API
+Unfortunately DuckDuckGo does not support an official API acces (anynmore!). In fact on their website they clearly discourage the users against doing programatic searches.  They do provide a very Limited API that only suggests relevant topics with search links on DuckDuckGo. It's not a very useful tool as is, but I am including it in the resources as an interesting example fr users that may like the idea. You cna use it by;
+
+#+begin_src emacs-lisp
+(require 'consult-web-duckduckgo)
+(add-to-list 'consult-web-dynamic-sources "DuckDuckGo API") ;; or (add-to-list 'consult-web-multi-sources...)
+#+end_src
+
 ***** Google
 
 The official way to use google as a search engine and fetch results is through an API, [[https://programmablesearchengine.google.com/about/][Google Custom Search]]. consult-web provides example functions for using this service in [[file:sources/consult-web-google.el]]. This source can also be added to the multi-source interactive commands (e.g. =consult-web-dynamic=, =consult-web-multi=,...) by adding ="Google"= to the relevant source list variable.
@@ -123,21 +165,12 @@ Note that to use this source you need to sign up for google API services and get
 (add-to-list 'consult-web-dynamic-sources "Google") ;; or (add-to-list 'consult-web-multi-sources...)
 #+end_src
 
-***** Brave
-Brave provides a very good and easy-to-use API with reasonable limits and is one of my favorites when it comes to programmatic search. For API documentaiont refer to the official website: [[https://brave.com/search/api/][Brave Search API]]. Once you sign up and create an account you can access the documentation and create an API key. This API key can then be set in consult-web in the following custom variable. For a more secure approach you can pass a function that retrives the key to this variable:
+***** Google Autosuggest
+Google Autosuggest is not well-documented and likely not officially upported, but using suggestqueries.google.com seems to work, if you pass a client paramter (e.g. http://suggestqueries.google.com/complete/search?client=firefox&q=YOURQUERY). I have not been able to find any official document that clearly states that this is not an allowed use-case, yet there are not oficial docuemntation saying that this is allowed either. Therefore this is currently not a reliable tool but since it works, I have included it as an example in the sources. You can use it by:
 
 #+begin_src emacs-lisp
-(require 'consult-web-brave)
-(setq consult-web-brave-api-key "YOUR-BRAVE-API-KEY-OR-FUNCTION")
-(add-to-list 'consult-web-dynamic-sources "Brave")  ;; or (add-to-list 'consult-web-multi-sources...)
-#+end_src
-
-***** Brave Auto Suggest
-[[https://api.search.brave.com/res/v1/suggest/search][Brave AutoSuggest API]], provides completion for search terms. You need to subscribe to autosuggest plan and create an API key specifically for the autosuggest service. Follow the official documentation here: [[https://brave.com/search/api/][Brave Search API]] and once you have an API key for autosuggest, you can set it in consult-web in the following custom variable. For a more secure approach you can pass a function that retrieves the key to this variable:
-#+begin_src emacs-lisp
-(require 'consult-web-brave-autosuggest)
-(setq consult-web-brave-autosuggest-api-key "YOUR-BRAVE-AUTOSUGGEST-API-KEY-OR-FUNCTION")
-(setq consult-web-default-autosuggest-command #'consult-web-dynamic-brave-autosuggest)
+(require 'consult-web-google-autosuggest)
+(setq consult-web-default-autosuggest-command #'consult-web-dynamic-google-autosuggest)
 #+end_src
 
 ***** Wikipedia
