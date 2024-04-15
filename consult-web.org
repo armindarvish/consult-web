@@ -2634,7 +2634,7 @@ TABLE is a hashtable from `consult-web--line-multi-fetch-results'."
                                               :search-history 'consult-web--search-history
                                               :selection-history 'consult-web--selection-history
                                               :dynamic 'both
-                                              :preview-key consult-preview-key
+                                              :preview-key 'consult-preview-key
                                               )))
 #+end_src
 **** provide and footer
@@ -2731,7 +2731,7 @@ TABLE is a hashtable from `consult-web--line-multi-fetch-results'."
                                                 :on-callback #'consult-web--org-headings-callback
                                                 :search-history 'consult-web--search-history
                                                 :selection-history 'consult-web--selection-history
-                                                :preview-key consult-preview-key
+                                                :preview-key 'consult-preview-key
                                                 :dynamic 'both
                                                 ))
 #+end_src
@@ -2749,7 +2749,7 @@ TABLE is a hashtable from `consult-web--line-multi-fetch-results'."
                                                             :on-return #'identity
                                                             :on-callback #'consult-web--org-roam-note-callback
 
-                                                            :preview-key consult-preview-key
+                                                            :preview-key 'consult-preview-key
                                                             :dynamic 'both)))
 #+end_src
 

@@ -33,7 +33,7 @@
                                               :search-history 'consult-web--search-history
                                               :selection-history 'consult-web--selection-history
                                               :dynamic 'both
-                                              :preview-key consult-preview-key
+                                              :preview-key 'consult-preview-key
                                               )))
 
 ;;; provide `consult-web-buffer' module
