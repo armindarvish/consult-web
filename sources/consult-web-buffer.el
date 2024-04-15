@@ -25,7 +25,7 @@
         )))
 
 (cl-loop for source in consult-buffer-sources
-         do (if (symbolp source) (consult-web--make-srouce-from-consult-source source
+         do (if (symbolp source) (consult-web--make-source-from-consult-source source
                                               :category 'consult-web
                                               :on-preview #'consult-web--consult-buffer-preview
                                               :on-return #'identity

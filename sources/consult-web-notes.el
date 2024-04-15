@@ -56,7 +56,7 @@
              ))))
 
 (when consult-notes-org-headings-mode
-  (consult-web--make-srouce-from-consult-source 'consult-notes-org-headings--source
+  (consult-web--make-source-from-consult-source 'consult-notes-org-headings--source
                                                 :category 'file
                                                 :face 'consult-web-notes-source-face
                                                 :search-history 'consult-web--search-history
@@ -72,7 +72,7 @@
 
 (when consult-notes-org-roam-mode
   (cl-loop for source in '(consult-notes-org-roam--refs consult-notes-org-roam--nodes)
-           do (consult-web--make-srouce-from-consult-source source
+           do (consult-web--make-source-from-consult-source source
                                                             :category 'file
                                                             :face 'consult-web-notes-source-face
                                                             :search-history 'consult-web--search-history

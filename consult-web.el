@@ -144,7 +144,7 @@ Sources can be made with the convinient macro `consult-web-define-source'."
 This variable is a list of strings or symbols;
  - strings can be name of a source, a key from `consult-web-sources-alist',
 which can be made with the convinient macro `consult-web-define-source'
-or by using `consult-web--make-srouce-from-consult-source'.
+or by using `consult-web--make-source-from-consult-source'.
  - symbols can be other consult sources
 (see `consult-buffer-sources' for example.)"
 :type '(repeat :tag "list of source names" (choice (string symbol))))
@@ -155,7 +155,7 @@ or by using `consult-web--make-srouce-from-consult-source'.
 This variable is a list of strings, each string being name of a source.
 The source name has to be a key from `consult-web-sources-alist'.
 Sources can be made with the convinient macro `consult-web-define-source'
-or by using `consult-web--make-srouce-from-consult-source'."
+or by using `consult-web--make-source-from-consult-source'."
   :type '(choice (repeat :tag "list of source names" string)))
 
 (defcustom consult-web-scholar-sources  (list)
@@ -164,7 +164,7 @@ or by using `consult-web--make-srouce-from-consult-source'."
 This variable is a list of strings, each string being name of a source.
 The source name has to be a key from `consult-web-sources-alist'.
 Sources can be made with the convinient macro `consult-web-define-source'
-or by using `consult-web--make-srouce-from-consult-source'."
+or by using `consult-web--make-source-from-consult-source'."
   :type '(choice (repeat :tag "list of source names" string)))
 
 (defcustom consult-web-dynamic-sources  (list)
@@ -173,7 +173,7 @@ or by using `consult-web--make-srouce-from-consult-source'."
 This variable is a list of strings, each string being name of a source.
 The source name has to be a key from `consult-web-sources-alist'.
 Sources can be made with the convinient macro `consult-web-define-source'
-or by using `consult-web--make-srouce-from-consult-source'."
+or by using `consult-web--make-source-from-consult-source'."
   :type '(choice (repeat :tag "list of source names" string)))
 
 (defcustom consult-web-highlight-matches t
@@ -258,7 +258,7 @@ a source (e.g. format data) or find what commands to run on
 selecting candidates from a source, etc.
 
 You can use the convinient macro `consult-web-define-source'
-or the command `consult-web--make-srouce-from-consult-source'
+or the command `consult-web--make-source-from-consult-source'
 to add to this alist.")
 
 (defvar consult-web--override-group-by nil
@@ -1267,8 +1267,7 @@ DOCSTRING is the docstring for the function that is returned."
                     table)
            table)))))))
 
-;;;###autoload
-(cl-defun consult-web--make-srouce-from-consult-source (consult-source &rest args &key request format on-preview on-return state on-callback group narrow-char category dynamic search-history selection-history face annotate preview-key docstring &allow-other-keys)
+(cl-defun consult-web--make-source-from-consult-source (consult-source &rest args &key request format on-preview on-return state on-callback group narrow-char category dynamic search-history selection-history face annotate preview-key docstring &allow-other-keys)
 "Makes a consult-web source from a consult source, CONSULT-SOURCE.
 All othe input variables are passed to `consult-web-define-source'
 macro. See `consult-web-define-source' for more details"
