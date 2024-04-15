@@ -75,15 +75,6 @@ Gets the default callback function from `consult-web-sources-alist'."
       (kill-new (format " %s " (string-trim url)))
     ))
 
-(defun consult-web-embark-copy-github-repo-as-kill (cand)
-  "Copy the Github's repo, if any, of the candiate to `kill-ring'."
-  (if-let* ((url (and (stringp cand) (get-text-property 0 :url cand)))
-            (urlobj (url-generic-parse-url url))
-            (path (url-filename urlobj))
-            (repo (string-join (take 2 (cdr (string-split path "/"))) "/")))
-      (kill-new repo)))
-
-
 (defun consult-web-embark-external-browse-link (cand)
   "Open the url with `consult-web-default-browse-function'"
   (if-let* ((url (and (stringp cand) (get-text-property 0 :url cand))))
