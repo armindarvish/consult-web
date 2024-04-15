@@ -16,6 +16,10 @@ consult-web provides wrappers and macros around [[https://github.com/minad/consu
 
 Here is the mandatory screenshot:
 
+#+ATTR_ORG: :width 800px
+#+ATTR_LATEX: :width 800px
+#+ATTR_HTML: :width 800px
+[[https://github.com/armindarvish/consult-web/blob/screenshots/screenshots/dynamic-omni-screenshot.gif]]
 
 * Getting Started
 Before you start, make sure you understand three points:
