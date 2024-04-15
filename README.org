@@ -12,7 +12,7 @@
 This is a package for getting search results from one or several custom sources (web search engines, AI assistants, ...) directly in Emacs minibuffer. Here is an example screenshot:
 
 * About consult-web
-consult-web provides wrappers and macros around [[https://github.com/minad/consult][consult]], to make it easier for users to get results from search engines, websites, AI assistants, etc. inside emacs minibuffer completion use [[https://github.com/minad/consult][consult]] and [[https://github.com/oantolin/embark][embark]] to interact with them. In other words, consult-web enables geting consult-style multi-source or dynamic results in minibuffer (e.g. runing =consult-buffer= or =cosnult-grep=) but for search engines and APIs. While consult-web provides some examples for sources, the idea is to remain agnostic of the source and provide the toolset to the users to define their own sources similar to what consult does for local sources.
+consult-web provides wrappers and macros around [[https://github.com/minad/consult][consult]], to make it easier for users to get results from search engines, websites, AI assistants, etc. inside emacs minibuffer completion. In other words, consult-web enables geting consult-style multi-source or dynamically completed results in minibuffer  but for search engines and APIs (e.g. simmilar to =consult-web= but for runing a google search from within emacs minibuffer). It provides a range of sources as examples, but the main idea here is to remain agnostic of the source and provide the toolset to the users to define their own sources similar to what consult does for local sources.
 
 Here is the mandatory screenshot:
 
@@ -20,6 +20,10 @@ Here is the mandatory screenshot:
 #+ATTR_LATEX: :width 800px
 #+ATTR_HTML: :width 800px
 [[https://github.com/armindarvish/consult-web/blob/screenshots/screenshots/dynamic-omni-screenshot.gif]]
+
+
+For a detailed review of the package and comparison to other tools, see my youtube video here:
+[[https://www.youtube.com/watch?v=7pDfyqBZwvo]]
 
 * Getting Started
 Before you start, make sure you understand three points:
@@ -477,7 +481,8 @@ Here is a srop-in config cnippert that puts everything mentioned above together.
 #+end_src
 
 * Usage and Features
-For explanation of features and comparison to some other packages, you can watch this video:
+For explanation of features and comparison to some other packages, you can watch my youtube video:
+https://www.youtube.com/watch?v=7pDfyqBZwvo
 
 ** Static v.s. Dynamic Interactive Commands
 For each source, you may have static or dynamic commands. Static commands query the use for an input and thne fetch the results. Dynamic commands, do dynamic completion as the user types (fetch results as the user is typiing). Dynamic commands feel a bit more intuitive and modern in 2024, but on the other hand have the disavantage of sending the query to the servers multiple times especially if you type slowly! Depending on the service provider and the API model, you may want to avoid hitting the server too frequently (for example for services that you pay per query), therefore for certain services a static command might be a better choice than the dynamic command. Using the macro =cosnult-web-define-source=, you can chose to creat static, dynamic or both by passing =nil=, =t=, or ='both= to the keyword =:dynamic=. Here is an example from the source code, for creating both static and dynamic comamnds for Brave search:
