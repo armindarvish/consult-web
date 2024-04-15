@@ -85,22 +85,22 @@ This limits the sources that =consult-web-sources= loads to ONLY those defined i
 |--------------------------+-------------------------|
 | Source                   | Category                |
 |--------------------------+-------------------------|
-| chatGPT                  | Simple AI prompts       |
+| [[https://github.com/armindarvish/consult-web/tree/develop?tab=readme-ov-file#open-ai-aka-chatgpt][chatGPT]]                  | Simple AI prompts       |
 | Bing                     | Search Engine           |
 | [[https://github.com/armindarvish/consult-web/tree/develop?tab=readme-ov-file#brave][Brave]]                    | Search Engine           |
 | [[https://github.com/armindarvish/consult-web/tree/develop?tab=readme-ov-file#brave-auto-suggest][Brave AutoSuggest]]        | AutoSuggest             |
-| consult-line-multi       | Local Text in Buffers   |
-| consult-notes            | Local Notes             |
-| consult-buffer           | Local Buffers           |
+| [[https://github.com/armindarvish/consult-web/tree/develop?tab=readme-ov-file#consult-line-multi][consult-line-multi]]       | Local Text in Buffers   |
+| [[https://github.com/armindarvish/consult-web/tree/develop?tab=readme-ov-file#consult-notes][consult-notes]]            | Local Notes             |
+| [[https://github.com/armindarvish/consult-web/tree/develop?tab=readme-ov-file#buffers][consult-buffer]]           | Local Buffers           |
 | DuckDuckGo (Limited API) | Search Suggestions      |
-| Elfeed                   | Feeds (RSS, videos,...) |
+| [[https://github.com/armindarvish/consult-web/tree/develop?tab=readme-ov-file#elfeed][Elfeed]]                   | Feeds (RSS, videos,...) |
 | [[https://github.com/armindarvish/consult-web/tree/develop?tab=readme-ov-file#google][Google]]                   | Search Engine           |
 | Google Autosuggest       | AutoSuggest             |
 | [[https://github.com/armindarvish/consult-web/tree/develop?tab=readme-ov-file#gptel][gptel]]                    | AI Assistant            |
 | Doi.org                  | Academic Reference      |
 | [[https://github.com/armindarvish/consult-web/tree/develop?tab=readme-ov-file#pubmed-entrez-api][PubMed]]                   | Academic Reference      |
-| Scopus                   | Academic Reference      |
-| StackOverflow            | Community Forum         |
+| [[https://github.com/armindarvish/consult-web/tree/develop?tab=readme-ov-file#scopus][Scopus]]                   | Academic Reference      |
+| [[https://github.com/armindarvish/consult-web/tree/develop?tab=readme-ov-file#stackoverflow][StackOverflow]]            | Community Forum         |
 | [[https://github.com/armindarvish/consult-web/tree/develop?tab=readme-ov-file#wikipedia][Wikipedia]]                | Encyclopedia            |
 | [[https://github.com/armindarvish/consult-web/tree/develop?tab=readme-ov-file#youtube][YouTube]]                  | Videos                  |
 |--------------------------+-------------------------|
