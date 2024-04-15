@@ -578,7 +578,7 @@ You can load the default emabrk actions by;
 #+begin_src emacs-lisp
 (require 'consult-web-embark)
 #+end_src
-The default actions allow you to open the links in the default or alternate browser and also to copy or insert, title and/or url of the links. Other embark actions can be defined per your own specific work flow. See the YouTube video above for some examples.
+The default actions allow you to open the links in the default or alternate browser and also to copy or insert, title and/or url of the links. Other embark actions can be defined per your own specific work flow. See the YouTube video for an example, here: [[https://youtu.be/7pDfyqBZwvo?t=4962]].
 
 ** Other Important Features
 *** Minmial Code Base
@@ -586,19 +586,19 @@ Without docstrings and whitespaces the code is less than 1000 lines and it only 
 
 *** Modular
 You can only load the parts you need. For example if all you need is an autosuggestion utility similar to =helm-google-autosuggest=, then you can do:
+
 #+begin_src emacs-lisp
 (require 'consult-web-brave-autosuggest)
 #+end_src
-This adds an extra 100-200 lines of code per source.
+This adds an extra 100-200 lines of code per source. This also means to add a new source, you only need to write a short piece of code following those examples!
 
 *** Customizable and Extendable
-Lots of customization options both for sources and aslo for runing actions on the results.
+Lots of customization options both for sources and aslo for running actions on the results.
 New sources can be added as you wish with different format, different actions,...
 
 *** Power User Capabilities
 Dynamic collection allows for complex workflows on the fly.
-Change query parameters on the fly by passing arguments. Select a random set of results ad-hoc using embark and run embark actions on them. This allows batch processing as well.
-For exampleto add a long list of results to an org-mode note for later review.
+Change query parameters on the fly by passing arguments. Select a random set of results ad-hoc using embark and run embark actions on them. This allows batch processing as well. For example to add a long list of results to an org-mode note for later review (as shown in this youtube video: [[https://youtu.be/7pDfyqBZwvo?t=4774]]).
 
 
 
