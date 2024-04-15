@@ -603,7 +603,7 @@ Change query parameters on the fly by passing arguments. Select a random set of 
 * Comparison to Other Packages
 To the best of my knowledge no other package provides the functionality and versatility of conssult-web. Browsers like  [[https://www.gnu.org/software/emacs/manual/html_node/emacs/EWW.html][EWW (GNU Emacs Manual)]] and  [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Embedded-WebKit-Widgets.html][Embedded WebKit Widgets (GNU Emacs Manual)]] only provide a browser and not the ability to get search results directly in minibuffer. Other built-in commands and packages such as  [[https://www.emacswiki.org/emacs/WebJump][WebJump]] or [[https://github.com/hrs/engine-mode][engine-mode]] enable passing queries to search engines, but do not provide results in the minibuffer. =helm-google-autosuggest= in [[https://github.com/emacs-helm/helm][helm]] provides autosuggestion utility only.  [[https://github.com/mnewt/counsel-web][counsel-web]] is the only package I know that provides google results directly in the minibuffer but the funcitonality is limited and the way it parses google website may get your IP flagged. consult-web took inspiration from all those packages and prvides a much more powerful solution thna any of those available solutions.
 
-* Bug reports
+* Bug Reports
 To report bug, first check if it is already reported in the [[https://github.com/armindarvish/consult-web/issues][*issue tracker*]] and see if there is an existing solution or add relevant comments and discussion under the same issue. If not file a new issue following these steps:
 
 1. Make sure the dependencies are installed, and both =consult= and =url-retrieve= (or other relevant commands) work as expected.
