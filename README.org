@@ -432,7 +432,7 @@ StackExchange API key from [[https://stackapps.com/][stackapps.com]].
 Be aware that as I add more sources, there may be more customization variables added. Refer to release notes or .... pages for more info if needed.
 
 
-** Drop-in *Example Config*
+** Drop in “example config”
 Here is a srop-in config cnippert that puts everything mentioned above together. Read the sections above for more details.
 
 #+begin_src emacs-lisp
