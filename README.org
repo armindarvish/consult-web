@@ -21,7 +21,7 @@ Before you start, make sure you understand three points:
 3. *Important Note 3*: The functions provided in =consult-web-sources=, provide a basic demonstration for integrating different services (such as search providers), however since each service comes with its own terms and conditions (that may change over time and vary from location to location), it is difficult to provide all-encompassing solutions and maintain them over time. consult-web is agnostic of how you connect and integrate other services in your setup (because neither consult-web nor emacs collect any information of the users or their usage), and therefore ultimately only you the user are responsible for setting up everything correctly and understand consequences of the usage (e.g. costs of using paid APIs) and ensure to stay within the bounds of relevant laws and regulations for your usage (i.e. follow software user agreements, etc.). Therefore, it is important for you to read and understand how to use each service, and also understand what happens under the hood when you integrate the service with consult-web. I try my best to provide documentation here as well as on the wiki pages, and will try to help when possible but before you proceed understand that you do everything at your own risk.
 
 ** Installation
-If you want an example config see [[id:30489375-DDE3-40D8-BD07-9E350FDD2FF9][Drop-in *Example Config*]]. Here is some detailed explanation;
+If you want an example config see [[https://github.com/armindarvish/consult-web?tab=readme-ov-file#drop-in-example-config][Drop-in *Example Config*]]. Here is some detailed explanation;
 
 *** Requirements
 In order to use consult-web, you need emacs >28.0 (I have not tested earlier versions) and [[https://github.com/minad/consult][consult]]. While this is th only requirements, I suggest you review consult's README since it recommends some other packages and useful configurations for different settings. Some of those extra packages and settings can improve your experience of consult-web as well. In particular, the section about [[https://github.com/minad/consult#asynchronous-search][asynchronous search]] is important for learning how to use inputs to search for result and narrow down in minibuffer. In addition combining consult with other packages such as [[https://github.com/minad/vertico][vertico]], [[https://github.com/oantolin/orderless][orderless]], and [[https://github.com/oantolin/embark][embark]] can improve the functionality as well as user-experience.
@@ -391,9 +391,6 @@ Be aware that as I add more sources, there may be more customization variables a
 
 
 ** Drop-in *Example Config*
-:PROPERTIES:
-:ID:       30489375-DDE3-40D8-BD07-9E350FDD2FF9
-:END:
 Here is a srop-in config cnippert that puts everything mentioned above together. Read the sections above for more details.
 
 #+begin_src emacs-lisp
