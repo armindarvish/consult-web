@@ -1841,12 +1841,10 @@ Gets the preview function from `consult-web-sources-alist'."
   "i u" #'consult-web-embark-insert-url-link
   "w t" #'consult-web-embark-copy-title-as-kill
   "w u" #'consult-web-embark-copy-url-as-kill
-  "w g" #'consult-web-embark-copy-github-repo-as-kill
   "o o" #'consult-web-embark-external-browse-link
   "o O" #'consult-web-embark-alternate-browse-link
   "o s" #'consult-web-embark-external-browse-search-link
   "o p" #'consult-web-embark-show-preview
-  "o g" #'consult-web-embark-open-consult-gh
   )
 
 
