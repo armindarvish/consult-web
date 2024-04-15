@@ -9,10 +9,8 @@
 #+html: <a href="https://www.gnu.org/software/emacs/"><img alt="GNU Emacs" src="https://img.shields.io/static/v1?label=Made%20For&message=GNU%20Emacs&color=7a5aba&logo=gnuemacs&logoColor=white"/></a>
 
 
-This is a package for getting search results from one or several custom sources (web search engines, AI assistants, ...) directly in Emacs minibuffer. Here is an example screenshot:
-
 * About consult-web
-consult-web provides wrappers and macros around [[https://github.com/minad/consult][consult]], to make it easier for users to get results from search engines, websites, AI assistants, etc. inside emacs minibuffer completion. In other words, consult-web enables geting consult-style multi-source or dynamically completed results in minibuffer  but for search engines and APIs (e.g. simmilar to =consult-web= but for runing a google search from within emacs minibuffer). It provides a range of sources as examples, but the main idea here is to remain agnostic of the source and provide the toolset to the users to define their own sources similar to what consult does for local sources.
+consult-web is a package for getting search results from one or several custom sources (web search engines, AI assistants, elfeed database, org notes, ...) directly in Emacs minibuffer. It provides wrappers and macros around [[https://github.com/minad/consult][consult]], to make it easier for users to get results from search engines, websites, AI assistants, etc. inside emacs minibuffer completion. In other words, consult-web enables geting consult-style multi-source or dynamically completed results in minibuffer  but for search engines and APIs (e.g. simmilar to =consult-web= but for runing a google search from within emacs minibuffer). It provides a range of sources as examples, but the main idea here is to remain agnostic of the source and provide the toolset to the users to define their own sources similar to what consult does for local sources.
 
 Here is the mandatory screenshot:
 
