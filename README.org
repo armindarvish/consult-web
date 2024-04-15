@@ -201,7 +201,6 @@ consult-web-sources provides =consult-web-chatgpt= and =consult-web-dynamic-chat
 Note that these commands are cimple one-time http requests. For a more extended conversation and a full-feature experience, you can use consult-web-gptel below.
 
 ***** gptel
-****** only a placeholder to send to gptel
 Another easy way to integrate AI assistants with consult-web is to use the amazing package, [[https://github.com/karthink/gptel][gptel]]. This is by far my favorite generative AI package in emacs becuase of how easy it is to integrate it with other things in emacs. To use this with consult-web, install gptel following the packages's documentation here: [[https://github.com/karthink/gptel][gptel]]. Once you have gptel setup, you can call =consult-web-gptel=, or =consult-web-dynamic-gptel= to get answers to your prompts. Note that, these functions do not fetch the answers to your prompt right away and wait for either a preview or for selecting the candidate to send the prompt to the backend AI. This is becuase sending the prompt to the backend can be expensive (in terms of paid services) and can also be slow depending on the backend and how long the answer is. Therefore, by design the user needs to actively decide to send the prompt to the backend.
 
 You can add any of the gptel sources to any of the multi-source interactive commands. For example:
