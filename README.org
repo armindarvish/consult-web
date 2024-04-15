@@ -1,0 +1,376 @@
+#+include: ~/OrgFiles/armin/org-macros.setup
+#+OPTIONS: h:1 num:nil toc:nil d:nil
+
+#+TITLE: consult-web - use consult to search the web
+#+AUTHOR: Armin Darvish
+#+LANGUAGE: en
+
+#+html: <a href="https://github.com/armindarvish"><img alt="Armin Darvish" src="https://img.shields.io/static/v1?label=Armin%20Darvish&message=consult-web&color=00A8B0&logo=github"/></a>
+#+html: <a href="https://www.gnu.org/software/emacs/"><img alt="GNU Emacs" src="https://img.shields.io/static/v1?label=Made%20For&message=GNU%20Emacs&color=7a5aba&logo=gnuemacs&logoColor=white"/></a>
+
+
+This is a package for getting search results from one or more custom source (web search engines, AI assistants, ...) directly in Emacs minibuffer. Here is an example screenshot:
+
+* About consult-web
+consult-web provides wrappers and macros around [[https://github.com/minad/consult][consult]], to make it easier for users to turn results from search engines, websites, AI assistants, etc. to a minibuffer completion list and use [[https://github.com/minad/consult][consult]] and [[https://github.com/oantolin/embark][embark]] to interact with them.
+
+While consult-web provides some examples for sources, the idea is to remain agnostic of the source and provide the tools to the user to define their own sources.
+
+** Main Interactive Commands
+consult-web does provide a few interactive commands. These are provided as god examples for users to follow when making their own custom commands for their work flow.
+
+1. =consult-web-multi=: This is an interactive command that uses multiple sources, as defined by =consult-web-multi-sources=, and shows the results in minibuffer completion. Here is an example screenshot:
+
+
+Note that consult-web-multi does not provide dynamic completion but some might find using this more intuitive for narrowing down the results. The user provides one search term, and once the results are retrieved, typing in the minibuffer will narrow down the candidates.
+
+2. =onsult-web-dynamic=: This is an interactive command that uses dynamic collection, similar to =consult-line-multi=. This allows dynamic completion of the search results (results are fetched as the user types), and this is done while still using multiple sources. Here is a screenshot:
+
+3. =consult-web-scholar=: This is similar to consult-web-dynamic, and is provided as an extra example to show how to make combination of sources for a specific purpose, in this case searching academic research literature.
+
+Note that using the dynamic completion comes with the disadvantage of potentially running many searches back to back which may cause performance issues (slow results retrieval) or hitting limits with APIs that limit number of queries per second, etc. Also, for narrowing down the results you need to use the =consult-async= syntax for example similar to =consult-grep= by adding =#= for narrow down.
+
+For example typing the following in the minibuffer:
+#+begin_example
+#emacs web search#github
+#+end_example
+
+First searches for “emacs web search”, and then uses “github” for narrow down.
+
+Furthermore, arguments can be passed to dynamic commands using similar syntax as =consult-grep=, too. For example typing the following in the minibuffer:
+
+#+begin_example
+#how to browse a url in emacs -- --model gpt-3.5-turbo
+#+end_example
+
+passes =gpt-3.5-turbo= as the value for the keyword argumetn =:model= to the backend functions of all the sources that fetch results. If any of those sources accept the keyword argument =:model=, the value =gpt-3.5-turbo= gets passed to them. For this reason it is recommended to always use functions that accept keyword arguments for functions that fetch results and add =&allow-other-keys= to avoid errors when non-existing keywords are passed to them.
+
+
+These are just two examples to motivate the functionality. Depending on the use-case, the users may want to define other interactive commands that use a different set of sources. For eample in the ......., you can see another example, =consult-web-scholar=, specifically for searching acadmic papers that uses dynamic collection as well but the sources are for academic papers.
+
+I hope is that over time, I can collect more examples of sources and use-cases in ....... pages, so useres can use them. If you make some intersting work flow or define new sources, please share it in the ..... pages as well.
+
+* Getting Started
+
+** Installation
+Before you start, make sure you understand that this is work in progress in its early stage and bugs and issues are very much expected.
+
+*Warning*: Before using this package, make sure you understand the general risks of using emacs to browse the web. By default, all codes are trusted inside emacs and browsers are naturally the target of many attacks. Therefore, it is important to be aware of the risks and be intentional about what links you open (or do not open) inside emacs. By default, consult-web would only be opening web pages (or calling APIs of) the sources (e.g. search engines, ...) and not any other websites. It's up to the user then to decide how she or he wants open the links. consult-web provide customization variables for this, so make sure you know how to set everything up.
+
+
+*** Requirements
+In order to use consult-web, you need emacs >28.0 (I have not tested earlier versions) and [[https://github.com/minad/consult][consult]]. If you want to use the example sources from consult-web, e.g. the sources defined in ...., you also need to install [[https://github.com/tkf/emacs-request][emacs-request]].
+
+
+Make sure you review consult's README since it recommends some other packages and useful configurations for different settings. Some of those may improve your experience of consult-web as well. In particular, the section about [[https://github.com/minad/consult#asynchronous-search][asynchronous search]] is important for learning how to use inputs to search for result and narrow down in minibuffer. In addition combining consult with other packages such as [[https://github.com/minad/vertico][vertico]], [[https://github.com/oantolin/orderless][orderless]], and [[https://github.com/oantolin/embark][embark]] can improve the functionality as well as user-experience.
+
+
+*** Installing consult-web Package
+consult-web is not currently on [[https://elpa.gnu.org/packages/consult.html][ELPA]] or [[https://melpa.org/#/consult][MELPA]]. Therefore, you need to install it using an alternative non-standard package manager such as [[https://github.com/radian-software/straight.el][straight.el]] or use manual installation.
+
+**** straight.el
+To install consult-web with straight.el you can use the following command. Make sure you load consult-wev after loading consult (e.g. =require 'consult=).
+
+#+begin_src emacs-lisp
+(straight-use-package
+ '(consult-web :type git :host github :repo "armindarvish/consult-web" :branch "main" :files (:defaults "extras/*.el")))
+#+end_src
+
+or if you use =use-package= macro with straight, you can do:
+
+#+begin_src emacs-lisp
+(use-package consult-mu
+	:straight (consult-web :type git :host github :repo "armindarvish/consult-web" :files (:defaults "extras/*.el"))
+        :after consult
+)
+#+end_src
+
+You can also fork this repository and use your own repo.
+
+**** manual installation
+Clone this repo and make sure the files are on your load path, as described on [[https://www.emacswiki.org/emacs/LoadPath][EmacsWiki]].
+
+Make sure you load consult (e.g. =require 'consult=) before you load consult-web. If you use request to get results from web engines, you should also load that before consult-web (e.g. =require 'request=)
+
+** Adding Search Sources
+You can add search sources by loading the provided =consult-web-sources= module:
+#+begin_src emacs-lisp
+(require 'consult-web-source)
+#+end_src
+This provides default sources for some popular services, and adds interactive commands (dynamic, static or both depending the source). Over time I hope to add more services, hopefully by contribution from the community as well. Note that this is mainly for demonstration and provides examples, otherwise it is recommended that you edit this file and add/remove sources per your specific need and for your own use-cases.
+
+*IMPORTANT PRECAUTION:* While the functions provided in =consult-web-sources=, provide a basic demonstration for integrating different services, these are only provided as examples. Since each service comes with its own terms and conditions (that may change over time and vary from location to location), it is not possible to provide all-encompassing solutions. Furthermore, as an emacs package, consult-web is agnostic of how you the user connect and integrate other services in your setup (because neither consult-web nor emacs collect any information of the users or their usage) and therefore ultimately you the user are responsible for setting up everything correctly (e.g. to avoid unnecessarily cost when using paid APIs) and within the bounds of relevant laws and regulations to your usage (i.e. follow software user agreements, etc.). Therefore, it is important for you to read and understand how to use each service, and also understand what happens under the hood when you integrate the service with consult-web. I try my best to provide documentation here as well as on the ..... pages, and will try to help when possible but before you proceed understand that you do everything at your own risk.
+
+*** Search Engines
+**** Google
+
+The official way to use google as a search engine and fetch results through an API is to use [[https://programmablesearchengine.google.com/about/][Google Custom Search]]. consult-web provides example functions for using this service in =consult-web-google= and =consult-web-dynamic-google=. This source can also be added to the multi-source interactive commands (e.g. =consult-web-dynamic=, =consult-web-multi=,...) by adding ="Google"= to the relevant source list variable:
+
+#+begin_src emacs-lisp
+(add-to-list 'consult-web-dynamic-sources "Google") ;; or (add-to-list 'consult-web-multi-sources...)
+#+end_src
+
+
+Note that to use this source you need to sign up for google API services and get an *API key* and a *cx number* (see [[https://developers.google.com/custom-search/v1/using_rest][REST API]]). Once you have an API KEY and a cx number, you can set them in the following custom varibales. For a more secure approach you can also pass functions that return the values insted of directly passing strings:
+
+#+begin_src emacs-lisp
+(consult-web-google-customsearch-key "YOUR-GOOGLE-API-KEY-OR-FUNCTION")
+(consult-web-google-customsearch-cx "YOUR-GOOGLE-CX-NUMBER-OR-FUNCTION")
+#+end_src
+
+
+
+also see the ....... for more useful tips and discussion on using google as a search engine.
+
+**** Brave
+Brave provides a very good easy-to-use API with reasonable limits and is one of my favorites when it comes to programmatic search. To use Brave Search API, refer to the official website: [[https://brave.com/search/api/][Brave Search API]]. Once you sign up and create an account you can access the documentation and create an API key. This API key can then be set in consult-web in the following custom variable. For a more secure approach you can pass a function that retrives the key to this variable:
+
+#+begin_src emacs-lisp
+(setq consult-web-brave-api-key "YOUR-BRAVE-API-KEY-OR-FUNCTION")
+#+end_src
+
+**** Brave Auto Suggest
+[[https://api.search.brave.com/res/v1/suggest/search][Brave AutoSuggest API]], provides completion for search terms. You need to subscribe to autosuggest plan and create an API key specifically for the autosuggest service. Follow the official documentation here: [[https://brave.com/search/api/][Brave Search API]] and once you have an API key for autosuggest, you can set it in consult-web in the following custom variable. For a more secure approach you can pass a function that retrieves the key to this variable:
+#+begin_src emacs-lisp
+(setq consult-web-brave-autosuggest-api-key "YOUR-BRAVE-AUTOSUGGEST-API-KEY-OR-FUNCTION")
+#+end_src
+
+**** Wikipedia
+[[https://www.mediawiki.org/wiki/API:Main_page][Wikipedia's API]], provides a way to get programmatic search results for free. Search only operations do not need an account or API key. Therefore, you can directly use =consult-web-wikipedia= or =consult-web-dynamic-wikipedia= and you can also add Wikipedia to multi-source interactive commands for example by:
+ #+begin_src emacs-lisp
+(add-to-list 'consult-web-dynamic-sources "Wikipedia") ;; or (add-to-list 'consult-web-multi-sources...)
+#+end_src
+**** StackOverFlow
+While stack exchange allows using its API without an account or API key (a.k.a. anonymously), it is recommended to register for an API key through [[https://stackapps.com/][stackapps.com]], to get larger quota, and avoid getting blocked by human verification, etc. Once you have a key, you can set it in consult-web by the following custom variable. alternatively use a function that returns the key for a more secure approach:
+
+#+begin_src emacs-lisp
+(setq consult-web-stackexchange-api-key "YOUR-STACKEXCHANGE-API-KEY-OR-FUNCTION")
+#+end_src
+
+Follow the official API documentation here: [[https://api.stackexchange.com/docs][StackExchange API Docs]]. You can use their interactive tools, such as [[https://api.stackexchange.com/docs/advanced-search][Advanced Search API]] to get a sense of query parameters and build your custom tool. consult-web provides examples in =consult-web-stackoverflow= and =consult-web-dynamic-stackoverflow= for fetching results from stackoverflow, but you cna make your own custom tool from other stack exchange sources as well.
+
+**** PubMed Entrez API
+If you would liek to use PubMed to search academic literature, then =consult-web-pubmed= and =consult-web-dynamic-pubmed= provide interactive commands to search PubMed. This uses PubMed's API (as opposed to parsing the html webpage), through PubMed's Entez e-utilities services which requires an API Key. For official documentaton, see [[https://www.ncbi.nlm.nih.gov/books/NBK25500/][PubMed Entrez e-utilities]]. Once you create an API key, you can set it in consult-web using the following custom variabele or a function that returns the key instead of directly using the string.
+#+begin_src emacs-lisp
+(setq consult-web-pubmed-api-key "YOUR-PUBMED-API-KEY-OR-FUNCTION")
+#+end_src
+
+I do provide an example of using html-parsing for pubmed webpage (i.e. search pubmed anonymously) in the ....... pages. This is mainly to demonstrate how one can define a source that uses html-parsing, otherwise APIs are generally preferred.
+
+*** AI Assistants
+**** Open AI (a.k.a. chatGPT)
+If you want to use [[https://openai.com/product][Open AI's API]] (e.g. for chatGPT results), you need to get an API key. Follow the official documentation here: [[https://platform.openai.com/docs/introduction][Open AI API docs]], and once you have an API key, you can set it in consult-web with the following custom variable. Using a function that returns the key is more secure than using the string directly.
+#+begin_src emacs-lisp
+(setq consult-web-openai-api-key "YOUR-OPENAI-API-KEY-OR-FUNCTION")
+#+end_src
+
+consult-web-sources provides =consult-web-chatgpt= and =consult-web-dynamic-chatgpt= commands for directly sending a prompt to Open AI api and retrieving responses. note that depending on the prompt this may be a bit slower and also be aware that the when prompts are sent to OpenAI, this can incur charges on your account, so you may want to be cautious of how you use these functions.
+
+You cann add any of the gptel sources to any of the multi-source interactive commands. For example:
+
+#+begin_src emacs-lisp
+(add-to-list consult-web-dynamic-sources "gptel")  ;; or add-to-list consult-web-multi,...
+#+end_src
+
+**** gptel
+***** only a placeholder to send to gptel
+Another easy way to integrate AI assistants with consult-web s to use the amazing package, [[https://github.com/karthink/gptel][gptel]]. This is by far my favorite generative AI package in emacs becuase of how easy it is to integrate it with other things in emacs. To use this with consult-web, install gptel following the packages's documentation here: [[https://github.com/karthink/gptel][gptel]]. Once you have gptel setup, you can call =consult-web-gptel=, or =consult-web-dynamic-gptel= to get answers to your prompts. Note that, these functions do not fetch the answers to your prompt right away and wait for either a preview or for selecting the candidate in preview buffer to send the prompt to the backend AI. This is becuase sending the prompt to the backend can be expensive (in terms of paid services) and can also be slow depending on the backend and how long the answer is. Therefore, by design the user needs to actively decide to send the prompt to the backend. If you want the behavior where the prompt is send to the backend right away and the results are presented in the minibuffer candidate, then see =gptel-direct= below and =consult-web-chatgpt= above for some exampels on how to achieve that.
+
+***** sending prompts to gptel right away
+In contrast to functions above, =consult-web-gptel-direct= and =consult-web-dynamic-gptel-direct=, send the prompts to the backend right away and show a snippet of the result in the minibuffer candidate. This avoids the extar step of sending the prompt to the backend but can be slow especially if the reponse is long and also owuld mean that every prompt is sent to the backend, which cand be costly if regularly used with paid services.
+
+
+You cann add any of the gptel sources to any of the multi-source interactive commands. For example:
+
+#+begin_src emacs-lisp
+(add-to-list consult-web-dynamic-sources "gptel")  ;; or gptel-dirct ,...
+#+end_src
+
+
+*** What about other sources?
+I am hoping to add examples for more sources over time. I think the currently provided examples in consult-web-sources.el should be sufficient for users to learn how to make new sources on their own. I will add more in-depth instructions and explanations in the .... pages for you to understand how to define new custom sourcs. If you use the package and come up with new sources or use-cases, I encourgae you to share it with others in the ...... pages as well so everyone can benefit from it. If such source or use-case is novel enough that adds some new value beyond the current examples, I can also consider adding that to the repo, otherwise we can just keep these in .... pages, to avoid adding unneccesssary bloat.
+
+** Configuration
+consult-web is built with the idea that the user should be able to customize everything based on their use-case, therefore the user is very much expected to learn how to configure this package. Therefore, I recommend you read through this section and understand how to configure the package according to your needs and for your specific use-case.
+
+
+*** Customization  Variables
+The following customizable variables are provided:
+
+**** main
+***** =consult-web-default-browse-function=
+Default browse function for opening urls. This can be set to external browser function by;
+#+begin_src emacs-lisp
+(setq consult-web-default-browse-function 'browse-url)
+#+end_src
+
+***** =consult-web-default-preview-function=
+Default function to use for previewing links. This can for example be set to [[https://www.gnu.org/software/emacs/manual/html_mono/eww.html][eww]]:
+
+#+begin_src emacs-lisp
+(setq consult-web-default-preview-function #'eww-browse-url)
+#+end_src
+
+or or [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Embedded-WebKit-Widgets.html][xwidegt-webkit]]:
+
+#+begin_src emacs-lisp
+(setq consult-web-default-preview-function #'xwidget-webkit-browse-url)
+#+end_src
+
+***** =consult-web-show-preview=
+  This turns previews on/off for all consult-web sources. It is recommended to set this to =t= and use =preview-key= to control previews per source.
+
+***** =consult-web-preview-key=
+This is the default preview key. A good choice might be "C-o".
+#+begin_src emacs-lisp
+(setq consult-web-preview-key "C-o")
+#+end_src
+
+***** =consult-web-default-count=
+By default consult-web retrieves only *up to* this many results per source. It is recommended to keep this to a low number (e.g. 5 to 10) to keep the performace fast. The default is set to 5 becausen owadays  for most everyday use-cases, you probably won't need more than that.
+
+#+begin_src emacs-lisp
+(setq consult-web-default-count "5")
+#+end_src
+
+Keep in mind that with dynamic commands of consult-web, you can always increase the number by passing arguments to =-n= or =--count= (for example by typing =search term -- -n 30=, you can retrieve up to 30 results.
+
+
+***** =consult-web-default-page=
+This is similar to going to page 2, 3,...,N on a clasic search result page. If this is set to N, first (N * count/page) results are skipped and the next page of results are shown. It is recommeded to keept this as default, 0, to see the top results.
+
+Keep in mind that with dynamic commands of consult-web, you can always change the page by passing values to arguments =-p= or =--page= (for example by typing =search term -- -p 2=, you can get page 2.
+
+***** =consult-web-group-by=
+This is the field that is used to group the results. By default, results are grouped by the domain of the url (e.g. "bbc.com" v.s. "nytimes.com"), but you can change this to group by the name of the source (e.g. "Google" v.s. "Brave",...) or by the full url ,etc.
+
+#+begin_src emacs-lisp
+(setq consult-web-group-by :source)
+#+end_src
+
+
+***** =consult-web-multi-sources=
+This is a list of source name strings (e.g. ='("Google", "Wikipedia", "chatGPT")=) that will be used in the command =consult-web-multi= (see above for description).
+
+***** =consult-web-scholar-sources=
+This is a list of source name strings (e.g. ='("PubMed")=) that will be used in the command =consult-web-scholar= (see above for description).
+
+
+***** =consult-web-dynamic-sources=
+This is a list of source name strings (e.g. ='("Google", "Wikipedia", "chatGPT")=) that will be used in the command =consult-web-dynamic= (see above for description).
+
+***** =consult-web-highlight-matches=
+Whether consult-web highlights matches of the search term in the minibuffer candidates. This is useful to highlight the relevance of the search results.
+
+
+***** =consult-web-default-interactive-command=
+This is a convinient feature to bind your favorite consult-web interactive command to the command called =consult-web=, so it is easier to remember and find when you call =M-x=. Youc an bind this to any of the multi-source interactive commadns (such as =consult-web-dyamic= or =consult-web-multi=, ...) or you can bind it to single-source commands (e.g. =consult-web-dynamic-google= or =consult-web-google=,...)
+
+***** =consult-web-default-autosuggest-command=
+Default autosuggest command. consult-web provides an example with  consult-web-dynamic-brave-autosuggest, but you can also define other custom autosuggest commands from other sources (e.g. google, wikipedia, ...)
+
+#+begin_src emacs-lisp
+(setq consult-web-default-autosuggest-command #'consult-web-dynamic-brave-autosuggest)
+#+end_src
+
+***** =consult-web-dynamic-input-debounce=
+In dynamic commands, the dynamic collection process is started only when there has not been new
+input for =consult-web-dynamic-input-debounce= seconds. If you type slow or think you need time to think for what you want to search, you may want to increase this number, so you don't run searches prematurely, especially if you want to avoid running premature search terms on paid services.
+By default this inherits from consult's built-in input-debounce value, which is 0.5. Personally I find that a bit too fast for consult-web because I do not want consult-web to send a query to paid openai API while I am still typing my query so I slow it down to 0.8 - 1s.
+
+#+begin_src emacs-lisp
+(setq consult-web-dynamic-input-debounce 0.8)
+#+end_src
+
+
+***** =consult-web-dynamic-input-throttle=
+In dynamic commands, the dynamic collection process is started only every =consult-web-dynamic-input-throttle= seconds. If you use API services that have limited number of queries per second, you may want to increase this number to avoid getting errors. I set this to 2x my input-debounce value:
+
+#+begin_src emacs-lisp
+(setq consult-web-dynamic-input-throttle 1.6)
+#+end_src
+
+
+***** =consult-web-dynamic-refresh-delay=
+In dynamic commands, the completion UI is only updated every =consult-web-dynamic-refresh-delay= seconds. You probably want to run this as fast as =consult-web-dynamic-input-debounce=.
+
+#+begin_src emacs-lisp
+(setq consult-web-dynamic-input-throttle 0.8)
+#+end_src
+
+**** per source
+As mentioned above, once you load sources (e.g. =(require 'consult-web-sources)=), then you will get more customization variables per source. These include variables for API keys. Here are some examples:
+
+***** =consult-web-google-customsearch-key= and =consult-web-google-customsearch-cx=
+API Key and cx-number for [[https://programmablesearchengine.google.com/about/][Google custom Search]].
+
+#+begin_src emacs-lisp
+(consult-web-google-customsearch-key "YOUR-GOOGLE-API-KEY-OR-FUNCTION")
+(consult-web-google-customsearch-cx "YOUR-GOOGLE-CX-NUMBER-OR-FUNCTION")
+#+end_src
+
+***** =consult-web-brave-api-key=
+ [[https://brave.com/search/api/][Brave Search API]] key. 
+#+begin_src emacs-lisp
+(setq consult-web-brave-api-key "YOUR-BRAVE-API-KEY-OR-FUNCTION")
+#+end_src
+
+***** =consult-web-openai-api-key=
+[[https://openai.com/product][Open AI's API]] key 
+#+begin_src emacs-lisp
+(setq consult-web-openai-api-key "YOUR-OPENAI-API-KEY-OR-FUNCTION")
+#+end_src
+
+***** =consult-web-stackexchange-api-key=
+StackExchange API key from [[https://stackapps.com/][stackapps.com]]. 
+#+begin_src emacs-lisp
+(setq consult-web-stackexchange-api-key "YOUR-STACKEXCHANGE-API-KEY-OR-FUNCTION")
+#+end_src
+
+Be aware that as I add more sources, there may be more customization variables added. Refer to release notes or .... pages for more info if needed.
+
+** Drop-in *Example Config*
+Here is a srop-in config cnippert that puts everything mentioned above together. Read the sections above for more details.
+
+#+begin_src emacs-lisp
+(use-package consult-web
+  :straight (consult-web :type git :host github :repo "armindarvish/consult-web" :branch "main")
+  :after consult
+  :custom
+  ;; General settings that apply to all sources
+  (consult-web-show-preview t) ;;; show previews
+  (consult-web-preview-key "C-o") ;;; set the preview key to C-o
+  (consult-web-highlight-matches t) ;;; highlight matches in minibuffer
+  (consult-web-default-count 5) ;;; set default count 
+  (consult-web-default-page 0) ;;; set the default page (default is 0 for the first page)
+  
+  ;;; optionally change the consult-web debounce, throttle and delay. 
+  ;;; Adjust these (e.g. increase to avoid hiting a source (e.g. an API) too frequently)
+  (consult-web-dynamic-input-debounce 0.8) 
+  (consult-web-dynamic-input-throttle 1.6) 
+  (consult-web-dynamic-refresh-delay 0.8)
+  
+  :config
+  ;; Add sources and configure them
+  ;;; load the example sources provided by default
+  (require 'consult-web-sources)
+
+  ;;; set multiple sources for consult-web-multi command. Change these lists as needed for different interactive commands. Keep in mind that each source has to be a key in `consult-web-sources-alist'.
+  (setq consult-web-multi-sources '("Brave" "Wikipedia" "chatGPT" "Google")) ;; consult-web-multi 
+  (setq consult-web-dynamic-sources '("gptel" "Brave" "StackOverFlow" )) ;; consult-web-dynamic  
+  (setq consult-web-scholar-sources '("PubMed")) ;; consult-web-scholar
+
+  ;; Per source customization
+  ;;; Pick you favorite autosuggest command.
+  (setq consult-web-default-autosuggest-command #'consult-web-dynamic-brave-autosuggest) ;;or any other autosuggest source you define
+
+  ;;; Set API KEYs. It is recommended to use a function that returns the string for better security.
+  (setq consult-web-google-customsearch-key "YOUR-GOOGLE-API-KEY-OR-FUNCTION")
+  (setq consult-web-google-customsearch-cx "YOUR-GOOGLE-CX-NUMBER-OR-FUNCTION")
+  (setq consult-web-brave-api-key "YOUR-BRAVE-API-KEY-OR-FUNCTION")
+  (setq consult-web-stackexchange-api-key "YOUR-STACKEXCHANGE-API-KEY-OR-FUNCTION")
+  (setq consult-web-pubmed-api-key "YOUR-PUBMED-API-KEY-OR-FUNCTION")
+  (setq consult-web-openai-api-key "YOUR-OPENAI-API-KEY-OR-FUNCTION")
+  ;;; add more keys as needed here.
+  )
+#+end_src
