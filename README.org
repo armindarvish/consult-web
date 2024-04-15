@@ -567,7 +567,7 @@ Furthermore, arguments can be passed to dynamic commands using similar syntax as
 
 passes =gpt-3.5-turbo= as the value for the keyword argument =:model= to the backend functions of all the sources that fetch results. If any of those sources accept the keyword argument =:model=, the value =gpt-3.5-turbo= gets passed to them. For this reason it is recommended to always use functions that accept any keyword arguments (a.k.a. add =&allow-other-keys=) to avoid errors when non-existing keywords are passed to them.
 
-instead of using =--=, you can also use a keyword= with colon =:=. The following would be similar to the example above:
+instead of using =--= , you can also use a keyword with colon =:=. The following would be similar to the example above:
 
 #+begin_example
 #how to browse a url in emacs -- :model gpt-3.5-turbo
