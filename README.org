@@ -105,7 +105,6 @@ This limits the sources that =consult-web-sources= loads to ONLY those defined i
 | [[https://github.com/armindarvish/consult-web/tree/develop?tab=readme-ov-file#youtube][YouTube]]                  | Videos                  |
 |--------------------------+-------------------------|
 
-
 **** Web Search Sources
 ***** Google
 
