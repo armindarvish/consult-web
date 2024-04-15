@@ -66,7 +66,7 @@
                                                 :on-callback #'consult-web--org-headings-callback
                                                 :search-history 'consult-web--search-history
                                                 :selection-history 'consult-web--selection-history
-                                                :preview-key consult-preview-key
+                                                :preview-key 'consult-preview-key
                                                 :dynamic 'both
                                                 ))
 
@@ -81,7 +81,7 @@
                                                             :on-return #'identity
                                                             :on-callback #'consult-web--org-roam-note-callback
 
-                                                            :preview-key consult-preview-key
+                                                            :preview-key 'consult-preview-key
                                                             :dynamic 'both)))
 
 ;;; provide `consult-web-notes' module
