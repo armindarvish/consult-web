@@ -45,7 +45,7 @@ To install consult-web with straight.el you can use the following command. Make 
 
 #+begin_src emacs-lisp
 (straight-use-package
- '(consult-web :type git :host github :repo "armindarvish/consult-web" :files (:defaults "sources/*.el")))
+ '(consult-web :type git :host github :repo "armindarvish/consult-web" :files (:defaults "sources/*.el"))
 #+end_src
 
 or if you use =use-package= macro with straight, you can do:
@@ -437,7 +437,7 @@ Here is a srop-in config cnippert that puts everything mentioned above together.
 
 #+begin_src emacs-lisp
 (use-package consult-web
-  :straight (consult-web :type git :host github :repo "armindarvish/consult-web" :branch "main")
+  :straight (consult-web :type git :host github :repo "armindarvish/consult-web" :branch "main" :files (:defaults "sources/*.el"))
   :after consult
   :custom
   ;; General settings that apply to all sources
