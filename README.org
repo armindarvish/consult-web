@@ -298,7 +298,7 @@ Default browse function for opening urls. This can be set to external browser fu
 ***** =consult-web-alternate-browse-function=
 Secondary browse function for opening urls. This can for example be set to eww or some other browsers for quick access to an alternative browser with embark actions.
 #+begin_src emacs-lisp
-(setq consult-web-default-browse-function 'eww-browse-url)
+(setq consult-web-alternate-browse-function 'eww-browse-url)
 #+end_src
 ***** =consult-web-default-preview-function=
 Default function to use for previewing links. This can for example be set to [[https://www.gnu.org/software/emacs/manual/html_mono/eww.html][eww]]:
