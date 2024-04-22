@@ -51,7 +51,7 @@ To install consult-web with straight.el you can use the following command. Make 
 or if you use =use-package= macro with straight, you can do:
 
 #+begin_src emacs-lisp
-(use-package consult-mu
+(use-package consult-web
 	:straight (consult-web :type git :host github :repo "armindarvish/consult-web" :files (:defaults "sources/*.el"))
         :after consult
 )
@@ -626,7 +626,7 @@ This is an open source package, and I appreciate feedback, suggestions, ideas, e
 
 If you want to contribute to the code, please note that the main branch is currently stable (as stable as a work in progress like this can be) and the develop branch is the current work in progress. So, *start from the develop branch* to get the latest work-in-progress updates and create a new branch with names such as feature/name-of-the-feature or fix/issue, ... Do the edits and then create a new pull request to merge back with the *develop* branch when you are done with your edits.
 
-Importantly, keep in mind that I am using a *literate programming approach* (given that this is a small project with very limited number of files) where everything goes into *consult-mu.org* and then gets tangled to appropriate files (for now that includes consult-mu.el and consult-mu-embark.el). If you open a pull-request where you directly edited the .el files, I will likely not approve it because that will then get overwritten later when I tangle from the .org file. In other words, *Do Not Edit The .el Files!* only edit the .org file and tangle to .el files.
+Importantly, keep in mind that I am using a *literate programming approach* (given that this is a small project with very limited number of files) where everything goes into *consult-web.org* and then gets tangled to appropriate files (e.g. consult-web.el). If you open a pull-request where you directly edited the .el files, I will likely not approve it because that will then get overwritten later when I tangle from the .org file. In other words, *Do Not Edit The .el Files!* only edit the .org file and tangle to .el files.
 
 
 * Acknowledgments
