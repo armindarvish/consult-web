@@ -149,7 +149,7 @@ DOI.org allows you to get the target url for DOI strings (for example for academ
 and then run =consult-web-dynamic-doiorg= or use =consult-web--doi-to-url= function.
 
 ***** DuckDuckGo Limited API
-Unfortunately DuckDuckGo does not support an official API acces (anynmore!). In fact on their website they clearly discourage the users against doing programatic searches.  They do provide a very Limited API that only suggests relevant topics with search links on DuckDuckGo. It's not a very useful tool as is, but I am including it in the resources as an interesting example fr users that may like the idea. You cna use it by;
+Unfortunately DuckDuckGo does not support an official API acces (anynmore!). In fact on their website they clearly discourage the users against doing programatic searches.  They do provide a very Limited API that only suggests relevant topics with search links on DuckDuckGo. It's not a very useful tool as is, but I am including it in the resources as an interesting example fr users that may like the idea. You can use it by;
 
 #+begin_src emacs-lisp
 (require 'consult-web-duckduckgo)
