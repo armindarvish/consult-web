@@ -1,0 +1,200 @@
+* Karthink's Demo
+#+begin_src emacs-lisp
+;; -*- lexical-binding: t; -*-
+(require 'consult-web)
+(require 'consult-web-brave)
+(require 'consult-web-gptel)
+(require 'plz)
+
+(defun cw--multi-search (async)
+  (let ((all-items))
+    (lambda (action)
+      (pcase action
+        ((pred stringp)
+         (when (> (length action) 2)
+
+           ;; QUERY GPTEL
+           (let ((gptel-max-tokens 24))
+             (gptel-request action
+               :system "Respond in 10 words or less."
+               :callback
+               (lambda (response _)
+                 (if response
+                     (let ((gptel-result
+                            (cw-gptel-format-candidate
+                             (list :title response
+                                   :source "gptel"
+                                   :query action
+                                   :model gptel-model
+                                   :stream gptel-stream
+                                   :backend (gptel-backend-name gptel-backend)))))
+                       (setf (alist-get 'gptel all-items) (list gptel-result))
+                       (funcall async 'flush)
+                       ;; NOTE: don't use mapcan/nconc here, they are destructive
+                       (funcall async (apply #'append
+                                             (mapcar #'cdr all-items))))
+                   (setf (alist-get 'gptel all-items) nil)))))
+
+           ;; QUERY BRAVE
+           (apply #'plz 'get
+                  (consult-web--brave-url-string action)
+                  (consult-web-brave-query-args
+                      (lambda (ht)
+                        (let* ((raw-results (map-nested-elt ht '("web" "results")))
+                               (brave-results (mapcar (lambda (item)
+                                                        (cw-brave-format-candidate
+                                                         `(:source "Brave"
+                                                           :query action
+                                                           :search-url ,(consult-web--brave-url-string action)
+                                                           :url ,(format "%s" (map-elt item "url"))
+                                                           :title ,(format "%s" (map-elt item "title")))))
+                                                      raw-results)))
+                          (setf (alist-get 'brave-search all-items) brave-results)
+                          (funcall async 'flush)
+                          (funcall async (apply #'append
+                                                (mapcar #'cdr all-items)))))))
+
+           ;; QUERY ELFEED
+           (if-let* ((raw-results (consult-web--elfeed-fetch-results action))
+                       (elfeed-results (mapcar #'consult-web-dynamic--elfeed-format-candidate
+                                               raw-results)))
+               (progn
+                 (setf (alist-get 'elfeed all-items) elfeed-results)
+                 (funcall async 'flush)
+                 (funcall async (apply #'append (mapcar #'cdr all-items))))
+             (setf (alist-get 'elfeed all-items) nil))))
+        (_ (funcall async action))))))
+
+
+;;; Metadata handling (all sources)
+
+(defun cw-group-function (cand transform)
+  (if transform
+      cand
+    (get-text-property 0 :source cand)))
+
+(defvar cw-actions
+  `(("gptel"
+     :on-callback ,#'consult-web--gptelbuffer-preview
+     :on-preview  ,#'consult-web--gptelbuffer-preview
+     :on-return   ,#'identity)
+    ("Brave"
+     :on-callback ,#'consult-web--default-callback
+     :on-preview ,#'consult-web--default-url-preview
+     :on-return   ,#'identity)
+    ("elfeed"
+     :on-callback ,#'consult-web--elfeed-preview
+     :on-preview  ,#'consult-web--elfeed-preview
+     :on-return   ,#'identity)))
+
+(defun cw--dynamic-state-function ()
+  (lambda (action cand &rest args)
+    (if cand
+        (let* ((source (get-text-property 0 :source cand))
+               (state (map-nested-elt cw-actions `(,source :state)))
+               (preview (map-nested-elt cw-actions `(,source :on-preview)))
+               (return (map-nested-elt cw-actions `(,source :on-return))))
+          (if state
+              (funcall state action cand args)
+            (pcase action
+              ('preview
+               (if preview (funcall preview cand) (consult-web--default-url-preview cand)))
+              ('return
+               (if return (funcall return cand) cand))))))))
+
+;;; gptel-specific
+
+(defun cw-gptel-format-candidate (attrs)
+  (let* ((title (propertize
+                 (consult-web--set-string-width
+                  (plist-get attrs :title) (floor (* (frame-width) 0.4)))
+                 'face 'consult-web-ai-source-face))
+         (query (plist-get attrs :query))
+         (source (plist-get attrs :source))
+         (model (plist-get attrs :model))
+         (backend (plist-get attrs :backend))
+         (stream (plist-get attrs :stream))
+         (match-str (and (stringp query)
+                         (consult--split-escaped
+                          (car (consult--command-split query)))))
+         (str (concat title
+                      (when backend (concat
+                                     (propertize (format "\t%s" backend) 'face 'consult-web-domain-face)
+                                     (if model (propertize (format ":%s" model) 'face 'consult-web-path-face))))
+                      (when stream (propertize " ~stream~ " 'face 'consult-web-source-face))
+                      (when source (concat "\t" source))))
+         (str (apply #'propertize str attrs)))
+    str))
+
+;;; Brave-specific
+
+(defun consult-web--brave-url-string (query)
+  (concat consult-web-brave-url "?"
+          (url-build-query-string
+           `(("q" ,(url-hexify-string query))
+             ("count" ,(format "%s" 5))
+             ("page" ,(format "%s" 0))))))
+
+(defun consult-web-brave-query-args (callback)
+  (declare (indent 1))
+  (list :headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
+                   ("Accept" . "application/json")
+                   ("Accept-Encoding" . "gzip")
+                   ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-api-key)))
+        :as #'json-parse-buffer
+        :then callback
+        :else (lambda (plz-error) (print plz-error (get-buffer "*scratch*")))))
+
+(defun cw-brave-format-candidate (attrs)
+  (let* ((title (propertize
+                 (consult-web--set-string-width
+                  (plist-get attrs :title) (floor (* (frame-width) 0.4)))
+                 'face 'consult-web-default-face))
+         (url (plist-get attrs :url))
+         (urlobj (and url (url-generic-parse-url url)))
+         (domain (and (url-p urlobj) (url-domain urlobj)))
+         (domain (and (stringp domain) (propertize domain 'face 'consult-web-domain-face)))
+         (path (and (url-p urlobj) (url-filename urlobj)))
+         (path (and (stringp path) (propertize path 'face 'consult-web-path-face)))
+         (source (plist-get attrs :source))
+         (source (and (stringp source) (propertize source 'face 'consult-web-source-face)))
+         (query (plist-get attrs :query))
+         (match-str (and (stringp query)
+                         (consult--split-escaped
+                          (car (consult--command-split query)))))
+         (str (apply #'propertize title attrs)))
+    str))
+
+
+;;; Commands
+
+;;;###autoload
+(defun cw-search-demo ()
+  (interactive)
+  (let* ((consult-async-refresh-delay consult-web-dynamic-refresh-delay)
+         (consult-async-input-throttle consult-web-dynamic-input-throttle)
+         (consult-async-input-debounce consult-web-dynamic-input-debounce)
+         (selected
+          (consult--read
+           (consult--async-split
+            (consult--async-throttle
+             (cw--multi-search
+              (consult--async-refresh-timer
+               (consult--async-sink)))))
+           :initial "#"
+           :prompt "Search: "
+           :state (cw--dynamic-state-function)
+           :category 'consult-web
+           :preview-key consult-web-preview-key
+           :lookup (consult-web--lookup-function)
+           :annotate #'consult-web--annotate-function
+           :group #'cw-group-function)))
+    (when selected
+      (thread-first
+        (get-text-property 0 :source selected)
+        (alist-get cw-actions nil nil #'equal)
+        (plist-get :on-callback)
+        (funcall selected)))))
+
+(provide 'cw)
+#+end_src
