@@ -23,7 +23,7 @@ Here is the mandatory screenshot:
 For a detailed review of the package and comparison to other tools, see my youtube video here:
 [[https://www.youtube.com/watch?v=7pDfyqBZwvo]]
 
-You can also read my [[https://www.armindarvish.com/post/web_omni_search_in_emacs_with_consult-web/][blog post]] about the motivation and broader context of why I made consult-web and how I use it  everyday examples.
+You can also read my [[https://www.armindarvish.com/post/web_omni_search_in_emacs_with_consult-web/][blog post]] about the motivation and broader context of why I made consult-web and how I use it in everyday examples.
 
 * Getting Started
 Before you start, make sure you understand three points:
