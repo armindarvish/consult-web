@@ -2036,7 +2036,7 @@ See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/i
 
 (cl-defun consult-web--chatgpt-fetch-results (input &rest args &key model &allow-other-keys)
   "Fetches chat response for INPUT from chatGPT."
-  (let* ((model (or model "gpt-3.5-turbo"))
+  (let* ((model (or model gptel-model))
          (headers `(("Content-Type" . "application/json")
                     ("Authorization" . ,(concat "Bearer " (consult-web-expand-variable-function consult-web-openai-api-key))))))
     (funcall consult-web-retrieve-backend
