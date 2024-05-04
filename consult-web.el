@@ -1298,7 +1298,7 @@ POS and CATEGORY are the group ID and category for these items."
                    :predicate   (apply-partially #'consult-web--multi-predicate sources)
                    :annotate    (apply-partially #'consult-web--multi-annotate sources)
                    :group       (apply-partially #'consult-web--multi-group sources)
-                   :lookup      (apply-partially #'consult--multi-lookup sources)
+                   :lookup      (apply-partially #'consult-web--multi-lookup sources)
                    :preview-key (consult--multi-preview-key sources)
                    :narrow      (consult--multi-narrow sources)
                    :state       (consult--multi-state sources))))))
