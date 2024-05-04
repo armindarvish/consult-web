@@ -12,7 +12,7 @@
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: 0.2
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -27,13 +27,15 @@
 #+begin_src emacs-lisp
 ;;; Requirements
 (eval-when-compile
-(require 'consult)
 (require 'url)
 (when (featurep 'json)
   (require 'json))
 (when (featurep 'request)
   (require 'request))
 )
+
+(require 'consult)
+
 #+end_src
 
 
@@ -210,7 +212,7 @@ or by using `consult-web--make-source-from-consult-source'."
 (defcustom consult-web-retrieve-backend #'consult-web-url-retrieve-sync
   "Which command should `consult-web' use for url requests?"
   :type '(choice (function :tag "(Default) url-retrieve backend" #'consult-web-url-retrieve-sync)
-                 (function :tag "Emacs Request Backend"  #'consult-web-request)))
+                 (function :tag "Emacs Request Backend"  #'consult-web--request-sync)))
 
 (defcustom consult-web-default-autosuggest-command nil
   "Which command should `consult-web' use for auto suggestion on search input?"
@@ -519,9 +521,10 @@ Ommits keys in IGNORE-KEYS."
                  (funcall var)
     var))
 #+end_src
-
-**** url retrieve  backend
-***** log
+**** http requests
+***** backends
+****** url retrieve  backend
+******* log
 #+begin_src emacs-lisp
 (defun consult-web--log (string)
   "Logs the response from `consult-web-url-retrieve-sync' in `consult-web-log-buffer-name'."
@@ -535,7 +538,7 @@ Ommits keys in IGNORE-KEYS."
      (goto-char (point-min))
      (insert "\n\n**********************************************\n")))
 #+end_src
-***** parse http response
+******* parse http response
 #+begin_src emacs-lisp
 (defun consult-web--parse-http-response (&optional buffer)
   "Parse the first header line such as \"HTTP/1.1 200 OK\"."
@@ -545,9 +548,22 @@ Ommits keys in IGNORE-KEYS."
     (when (re-search-forward "\\=[ \t\n]*HTTP/\\(?1:[0-9\\.]+\\) +\\(?2:[0-9]+\\)" url-http-end-of-headers t)
     `(:http-version ,(match-string 1) :code ,(string-to-number (match-string 2)))))))
 #+end_src
-***** url retrieve synchronously
+******* get the response data
 #+begin_src emacs-lisp
-(cl-defun consult-web--url-retrieve-synchronously (url &rest settings &key params headers parser data type error encoding timeout)
+(defun consult-web--url-response-body (response-data)
+"Extracts the response body from `url-retrieve'."
+(plist-get response-data :data))
+#+end_src
+
+******* error-handler
+#+begin_src emacs-lisp
+(defun consult-web--url-retrieve-error-handler (_)
+  "Handles errors for consult-web-url-retrieve functions."
+  (message "consult-web: url-retrieve got an error: %s" (consult-web--parse-http-response)))
+#+end_src
+******* url retrieve synchronously
+#+begin_src emacs-lisp
+(cl-defun consult-web--url-retrieve-synchronously (url &rest settings &key params headers parser data (type "GET") error (encoding 'utf-8) timeout)
 "Retrieves URL synchronously.
 
 Passes all the arguments to url-retriev and fetches the results.
@@ -610,46 +626,112 @@ PARSER is a function that is executed in the url-retrieve response buffer and th
     response-data
     ))
 #+end_src
-***** get the response data
+******* url retrieve sync
 #+begin_src emacs-lisp
-(defun consult-web--url-response-body (response-data)
-"Extracts the response body from `url-retrieve'."
-(plist-get response-data :data))
-#+end_src
-***** url retrieve sync
-#+begin_src emacs-lisp
-(cl-defun consult-web-url-retrieve-sync (url &key params headers parser data type error encoding timeout)
+(cl-defun consult-web-url-retrieve-sync (url &key params headers parser data (type "GET") error (encoding 'utf-8) timeout)
 "Retrieves URL synchronously.
 
-Passes all the arguments to `consult-web--url-retrieve-synchronously' and in trun to `url-retrieve' fetches the results.
+Passes all the arguments to `consult-web--url-retrieve-synchronously'
+and in trun to `url-retrieve' to fetch the results synchronously.
 
-PARAMS are parameters added to the base url using `consult-web--make-url-string'.
-HEADERS are headers passed to `url-request-extra-headers'.
-DATA are http request data passed to `url-request-data'.
 TYPE is the http request type (e.g. “GET”, “POST”)
-ERROR
-ENCODING
-TIMEOUT
-PARSER is a function that is executed in the url-retrieve response buffer and the results are returned s the output of this function.
+PARAMS are parameters added to the base url using `consult-web--make-url-string'.
+HEADERS are headers passed to headers (e.g. `url-request-extra-headers').
+DATA are http request data passed to data (e.g. `url-request-data').
+PARSER is a function that is executed in the url-retrieve
+response buffer and the results are returned s the output of this function.
+CALLBACK is the function that is execute when the request is complete.
+ERROR is a function that handles errors
+ENCODING is the encoding used for the request (e.g. 'utf-8)
+TIMEOUT is the time in seconds for timing out the request
 "
-  (let ((type (or type "GET"))
-        (encoding (or encoding 'utf8))
-        (timeout (or timeout consult-web-default-timeout))
-        )
     (consult-web--url-response-body
-     (consult-web--url-retrieve-synchronously url :params params :headers headers :parser parser :data data :type type :error error :encoding encoding :timeout timeout))))
+     (consult-web--url-retrieve-synchronously url
+                                              :params params
+                                              :headers headers
+                                              :parser parser
+                                              :data data
+                                              :type type
+                                              :error error
+                                              :encoding encoding
+                                              :timeout (or timeout consult-web-default-timeout))))
 #+end_src
-**** request backend
-***** error-handler
+******* url retrieve async
 #+begin_src emacs-lisp
-  (cl-defun consult-web--error-handler (&rest args &key symbol-status error-thrown &allow-other-keys)
-    "Handles errors for `consult-web-request'."
-    (message "request: %s - %s" symbol-status error-thrown))
+(cl-defun consult-web-url-retrieve-async (url &rest settings &key params headers parser data (type "GET") callback error (encoding 'utf-8) timeout)
+"Retrieves URL synchronously.
+
+Passes all the arguments to url-retrieve
+and fetches the results asynchronously.
+
+TYPE is the http request type (e.g. “GET”, “POST”)
+
+PARAMS are parameters added to the base url
+using `consult-web--make-url-string'.
+
+HEADERS are headers passed to headers (e.g. `url-request-extra-headers').
+
+DATA are http request data passed to data (e.g. `url-request-data').
+
+PARSER is a function that is executed in the url-retrieve
+response buffer and the results are returned s the output of this function.
+
+CALLBACK is the function that is executed when the request is complete.
+
+ERROR is a function that handles errors.
+
+ENCODING is the encoding used for the request (e.g. 'utf-8).
+
+TIMEOUT is the time in seconds for timing out the request.
+"
+  (let* ((url-request-method type)
+         (url-request-extra-headers headers)
+         (url-request-data data)
+         (url-with-params (consult-web--make-url-string url params))
+         (response-data nil)
+         (buffer (if timeout
+                     (with-timeout
+                         (timeout
+                          (setf response-data (plist-put response-data :status 'timeout))
+                          nil)
+                       (url-retrieve url-with-params
+                                     (lambda (_)
+                                       (when-let* ((attrs (condition-case nil
+                                                              (funcall parser)
+                                                            (error (funcall error)))))
+                                                   (funcall callback attrs))) nil 'silent))
+                   (url-retrieve url-with-params
+                                 (lambda (_) (let* ((attrs (condition-case nil
+                                                              (funcall parser)
+                                                            (error (funcall error)))))
+                                               (funcall callback attrs))) nil 'silent))
+                 ))
+
+    (when buffer
+      (with-current-buffer buffer
+        (when consult-web-log-level
+          (save-excursion
+            (goto-char (point-min))
+            (cond
+             ((eq consult-web-log-level 'info)
+              (consult-web--log (format "URL: %s\nRESPONSE: %s" url (buffer-substring (point-min) (pos-eol)))))
+             ((eq consult-web-log-level 'debug)
+                 (consult-web--log (format "URL: %s\n\nRESPONSE-HEADER:\n%s\n\nRESPONSE-BODY: %s\n" url (buffer-substring (point-min) url-http-end-of-headers) (buffer-substring url-http-end-of-headers (point-max))))))
+            ))
+        )
+    )))
 #+end_src
-***** consult-web-request
+****** request backend
+******* error-handler
+#+begin_src emacs-lisp
+(cl-defun consult-web--request-error-handler (&rest args &key symbol-status error-thrown &allow-other-keys)
+  "Handles errors for request backend."
+  (message "consult-web: <request>  %s - %s" symbol-status error-thrown))
+#+end_src
+******* consult-web--request-sync
 #+begin_src emacs-lisp
 
-  (cl-defun consult-web-request (url &rest args &key params headers data parser placeholder error &allow-other-keys)
+  (cl-defun consult-web--request-sync (url &rest args &key params headers data parser placeholder error encoding &allow-other-keys)
     "Convinient wrapper for `request'.
 
 Passes all the arguments to request and fetches the results *synchronously*.
@@ -664,15 +746,72 @@ Refer to `request' documents for details."
         :params params
         :headers headers
         :parser parser
-        :error (or error #'consult-web--error-handler)
+        :error (or error #'consult-web--request-error-handler)
         :data data
-        :encoding 'utf-8
+        :encoding (or encoding 'utf-8)
         :success (cl-function (lambda (&key data &allow-other-keys)
                                 (setq candidates data))))
 
       candidates))
 #+end_src
+****** plz
+******* error-handler
+#+begin_src emacs-lisp
+(cl-defun consult-web--plz-error-handler (plz-error &rest args)
+  "Handles errors for plz backend."
+  (message "consult-web: <plz> %s" plz-error))
+#+end_src
+***** universal
+****** fetch url
+#+begin_src emacs-lisp
+(cl-defun consult-web--fetch-url-async (url backend &rest args &key type params headers data parser callback error encoding timeout &allow-other-keys)
+"Retrieves URL synchronously.
 
+Passes all the arguments to `consult-web--url-retrieve-synchronously' and in trun to `url-retrieve' fetches the results.
+
+TYPE is the http request type (e.g. “GET”, “POST”)
+PARAMS are parameters added to the base url using `consult-web--make-url-string'.
+HEADERS are headers passed to headers (e.g. `url-request-extra-headers').
+DATA are http request data passed to data (e.g. `url-request-data').
+PARSER is a function that is executed in the url-retrieve
+response buffer and the results are returned s the output of this function.
+CALLBACK is the function that is execute when the request is complete.
+ERROR is a function that handles errors
+ENCODING is the encoding used for the request (e.g. 'utf-8)
+TIMEOUT is the time in seconds for timing out the request
+"
+    (cond
+     ((eq backend 'plz)
+      (funcall #'plz (or type 'get) (consult-web--make-url-string url params)
+               :headers headers
+               :as parser
+               :then callback
+               :else (or error #'consult-web--plz-error-handler)
+               :timeout (or timeout consult-web-default-timeout)))
+     ((eq backend 'url)
+      (funcall #'consult-web-url-retrieve-async url
+               :type (or type "GET")
+               :params params
+               :headers headers
+               :parser parser
+               :data data
+               :error (or error #'consult-web--url-retrieve-error-handler)
+               :callback callback
+               :encoding encoding
+               :timeout (or timeout consult-web-default-timeout)))
+     ((eq backend 'request)
+      (funcall #'request url
+               :params params
+               :headers headers
+               :parser parser
+               :data data
+               :error (or error #'consult-web--request-error-handler)
+               :encoding encoding
+               :timeout (or timeout consult-web-default-timeout)
+               :complete (cl-function (lambda (&key data &allow-other-keys)
+                                        (funcall callback data)))
+                                     ))))
+#+end_src
 *** consult-web backend
 **** thing at point
 #+begin_src emacs-lisp
@@ -793,20 +932,46 @@ For more info on annotation refer to `consult' manual, particularly 'consult--re
 **** group candidates based on a keyword
 
 #+begin_src emacs-lisp
-(defun consult-web--group-function (group-by cand transform)
+;; (defun consult-web--group-function (group-by cand transform)
+;;   "Group candidates by GROUP-BY keyword.
+
+;; This is passed as GROUP to `consult--read' on candidates and is used to define the grouping for CAND. "
+;;   (let* ((group-by (or consult-web--override-group-by group-by consult-web-group-by))
+;;          (group-by (if (not (keywordp group-by)) (intern (concat ":" (format "%s" group-by))) group-by))
+;;          (name (or (if group-by (get-text-property 0 group-by cand) "N/A"))))
+;;     (cond
+;;      ((equal group-by :domain)
+;;       (when-let* ((url (get-text-property 0 :url cand))
+;;                   (urlobj (if url (url-generic-parse-url url) nil))
+;;                   (domain (if (url-p urlobj) (url-domain urlobj))))
+;;         (setq name domain))))
+;;   (if transform (substring cand) name)))
+
+(defun consult-web--group-function (sources cand transform &optional group-by)
   "Group candidates by GROUP-BY keyword.
 
 This is passed as GROUP to `consult--read' on candidates and is used to define the grouping for CAND. "
-  (let* ((group-by (or consult-web--override-group-by group-by consult-web-group-by))
-         (group-by (if (not (keywordp group-by)) (intern (concat ":" (format "%s" group-by))) group-by))
-         (name (or (if group-by (get-text-property 0 group-by cand) "N/A"))))
-    (cond
-     ((equal group-by :domain)
-      (when-let* ((url (get-text-property 0 :url cand))
+  (if transform (substring cand)
+    (let* ((group-by (or group-by consult-web--override-group-by consult-web-group-by))
+           (group-by (if (not (keywordp group-by)) (intern (concat ":" (format "%s" group-by))) group-by)))
+      (cond
+       ((equal group-by :domain)
+        (if-let* ((url (get-text-property 0 :url cand))
                   (urlobj (if url (url-generic-parse-url url) nil))
                   (domain (if (url-p urlobj) (url-domain urlobj))))
-        (setq name domain))))
-  (if transform (substring cand) name)))
+            domain
+          nil))
+       ((member group-by '(:nil :none :no :not))
+        nil)
+       (group-by
+        (if-let ((group (get-text-property 0 group-by cand)))
+            group
+          "N/A"))
+       (t
+        (if-let* ((source (plist-get (consult--multi-source sources cand) :name)))
+            source
+          nil)))
+      )))
 #+end_src
 
 **** narrowing function (for multi-source commands)
@@ -959,7 +1124,7 @@ from command-line options in alist of strings"
              ((string-match ":.*$" opt)
               (intern opt))
              (t nil)))
-       (val (or (nth (+ (cl-position opt opts :test 'equal) 1) opts) "nil"))
+       (val (or (cadr (member opt opts)) "nil"))
        (val (cond
              ((string-match "--.*$\\|:.*$" val)
               nil)
@@ -1075,6 +1240,166 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
 #+end_src
 
 
+*** consult-web-multi-async
+
+**** split-command
+#+begin_src emacs-lisp
+(defun consult-web--split-command (input &rest args)
+  (pcase-let* ((`(,query . ,opts) (consult--command-split input))
+               (remaining-opts (list))
+               (args (or args (list)))
+               )
+    (if opts
+        (progn
+      (cl-loop for opt in opts
+               do
+               (pcase-let* ((`(,key . ,val) (consult-web--extract-opt-pair opt opts (list "--group" ":group"))))
+                 (when key
+                   (setq args (append args (list key val)))
+                   (setq remaining-opts (cl-delete-duplicates (append remaining-opts (list opt (format "%s" val))))))
+                 ))
+
+      (setq opts (seq-difference opts remaining-opts))
+
+      (when (member "-n" opts)
+        (setq args (append args `(:count ,(cadr (member "-n" opts))))))
+
+      (when (member "-p" opts)
+        (setq args (append args `(:page ,(cadr (member "-p" opts))))))
+
+      (if (or (member "-g" opts) (member ":group" opts) (member "--group" opts))
+          (cond
+           ((member "-g" opts)
+            (setq consult-web--override-group-by (cadr (member "-g" opts))))
+           ((member "--group" opts)
+            (setq consult-web--override-group-by (cadr (member "--group" opts))))
+           ((member ":group" opts)
+            (setq consult-web--override-group-by (cadr (member ":group" opts)))))
+        (setq consult-web--override-group-by nil)
+        ))
+      (setq consult-web--override-group-by nil))
+    (list (or query input) args)
+    ))
+#+end_src
+**** muli-group
+#+begin_src emacs-lisp
+(defun consult-web--multi-group (sources cand transform)
+  "Return title of candidate CAND or TRANSFORM the candidate given SOURCES."
+  (if transform cand
+    (let* ((fun (and (plist-member (consult--multi-source sources cand) :group)
+                     (plist-get (consult--multi-source sources cand) :group))))
+      (cond
+       ((functionp fun)
+        (funcall fun sources cand transform))
+       ((stringp fun)
+        fun)
+       ((eq fun 'nil)
+        nil)
+       (t
+        (plist-get (consult--multi-source sources cand) :name))))))
+#+end_src
+**** multi-async
+#+begin_src emacs-lisp
+(defun consult-web--multi-async (async sources)
+  "Merge the results of (a)sync SOURCES and pass it to function ASYNC."
+  (let ((candidates (make-vector (length sources) nil)))
+    (lambda (action)
+      (pcase action
+        ((pred stringp)
+         (unless (equal action "")
+           (let ((idx 0))
+             (seq-doseq (src sources)
+               (let* ((face (and (plist-member src :face) `(face ,(plist-get src :face))))
+                      (cat (plist-get src :category))
+                      (items (plist-get src :items))
+                      (narrow (plist-get src :narrow))
+                      (type (or (car-safe narrow) narrow -1))
+                      (pos idx))
+                 (when (or (eq consult--narrow type)
+                           (not (or consult--narrow (plist-get src :hidden))))
+                   (condition-case nil
+                       (progn
+                         (when (functionp items) (setq items (funcall items action)))
+                         (aset candidates idx    ; sync source, refresh now
+                               (and items (consult-web--multi-propertize
+                                           items cat idx face)))
+                         (funcall async 'flush)
+                         (funcall async (apply #'append (append candidates nil))))
+                     (wrong-number-of-arguments
+                      (funcall items action      ; async source, refresh in callback
+                               (lambda (response-items)
+                                 (when response-items
+                                   (aset candidates pos
+                                         (consult-web--multi-propertize response-items cat pos face))
+                                   (funcall async 'flush)
+                                   (funcall async (apply #'append (append candidates nil))))))))))
+               (cl-incf idx)))))
+        (_ (funcall async action))))))
+#+end_src
+**** multi-propertize
+#+begin_src emacs-lisp
+
+(defun consult-web--multi-propertize (response-items category pos &optional face)
+  "Propertize RESPONSE-ITEMS with the multi-category datum and FACE.
+
+POS and CATEGORY are the group ID and category for these items."
+  (let ((annotated-items))
+    (dolist (item response-items annotated-items)
+      (let ((cand (consult--tofu-append item pos)))
+        ;; Preserve existing `multi-category' datum of the candidate.
+        (if (get-text-property 0 'multi-category cand)
+            (when face (add-text-properties 0 (length item) face cand))
+          ;; Attach `multi-category' datum and face.
+          (add-text-properties 0 (length item)
+                               `(multi-category (,category . ,item) ,@face) cand))
+        (push cand annotated-items)))))
+
+#+end_src
+**** multi-annotate
+#+begin_src emacs-lisp
+
+(defun consult-web--multi-annotate (sources cand)
+  (let ((src (consult--multi-source sources cand)))
+    (if-let ((fun (plist-get src :annotate)))
+        (funcall fun (cdr (get-text-property 0 'multi-category cand)))
+      (plist-get src :name)
+      )))
+#+end_src
+**** consult-web--multi
+#+begin_src emacs-lisp
+(defun consult-web--multi (sources &rest options)
+  (let* ((sources (consult--multi-enabled-sources sources))
+         (selected
+          (apply #'consult--read
+                 (consult--async-split
+                  (consult--async-throttle
+                   (consult-web--multi-async
+                    (consult--async-refresh-timer
+                     (consult--async-sink))
+                    sources)))
+                 (append
+                  options
+                  (list
+                   :sort        t
+                   :history     'consult-web--search-history
+                   :initial     (consult--async-split-initial nil)
+                   :category    'multi-category
+                   :predicate   (apply-partially #'consult--multi-predicate sources)
+                   :annotate    (apply-partially #'consult-web--multi-annotate sources)
+                   :group       (apply-partially #'consult-web--multi-group sources)
+                   :lookup      (apply-partially #'consult--multi-lookup sources)
+                   :preview-key (consult--multi-preview-key sources)
+                   :narrow      (consult--multi-narrow sources)
+                   :state       (consult--multi-state sources))))))
+    (if (plist-member (cdr selected) :match)
+        (when-let (fun (plist-get (cdr selected) :new))
+          (funcall fun (car selected))
+          (plist-put (cdr selected) :match 'new))
+      (when-let (fun (plist-get (cdr selected) :action))
+        (funcall fun (car selected)))
+      (setq selected `(,(car selected) :match t ,@(cdr selected))))
+    selected))
+#+end_src
 ** Macro
 *** make a variable for source
 **** make symbol for source name
@@ -2277,7 +2602,6 @@ See URL `https://brave.com/search/api/' for more info"
   :type '(choice (const :tag "Brave API Key" string)
                  (function :tag "Custom Function")))
 
-
 (cl-defun consult-web--brave-fetch-results (input &rest args &key count page &allow-other-keys)
   "Retrieve search results from Brave for INPUT.
 
@@ -2335,6 +2659,153 @@ PAGE is passed as page in query paramters.
                            :selection-history 'consult-web--selection-history
                            :dynamic 'both
                            )
+#+end_src
+
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-brave' module
+
+(provide 'consult-web-brave)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-brave)
+;;; consult-web-brave.el ends here
+#+end_src
+
+
+*** Brave
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-brave.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-brave.el --- Consulting Brave -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+#+end_src
+
+**** brave
+#+begin_src emacs-lisp
+(defvar consult-web-brave-search-url "https://search.brave.com/search")
+
+(defvar consult-web-brave-url "https://api.search.brave.com/res/v1/web/search")
+
+(defcustom consult-web-brave-api-key nil
+  "Key for Brave API.
+
+See URL `https://brave.com/search/api/' for more info"
+  :group 'consult-web
+  :type '(choice (const :tag "Brave API Key" string)
+                 (function :tag "Custom Function")))
+
+(defun cw--brave-request (query callback)
+  (let ((url-request-method "GET")
+        (url-request-extra-headers
+         `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
+           ("Accept" . "application/json")
+           ("Accept-Encoding" . "gzip")
+           ("X-Subscription-Token" . ,(let ((key cw-brave-api-key))
+                                       (if (functionp key) (funcall key) key))))))
+    (url-retrieve (cw-brave-url-string query)
+                  (lambda (_)
+                    (when-let* ((attrs (cw--url-parse-buffer))
+                                (raw-results (map-nested-elt attrs '(:web :results)))
+                                (annotated-results
+                                 (mapcar
+                                  (lambda (item)
+                                    (let* ((title (map-elt item :title))
+                                           (search-url (cw-brave-url-string query))
+                                           (url (map-elt item :url))
+                                           (urlobj (and url (url-generic-parse-url url)))
+                                           (domain (and (url-p urlobj) (url-domain urlobj))) ;we modify domain here
+                                           (domain (and (stringp domain)
+                                                        (propertize domain 'face 'font-lock-variable-name-face)))
+                                           (path (and (url-p urlobj) (url-filename urlobj)))
+                                           (path (and (stringp path)
+                                                      (propertize path 'face 'font-lock-warning-face)))
+                                           (decorated (concat title "\t"
+                                                              (propertize " " 'display '(space :align-to center))
+                                                              domain path
+                                                              )))
+                                      (propertize decorated
+                                                  :title title
+                                                  :url url
+                                                  :search-url search-url
+                                                  :query query)))
+                                  raw-results)))
+                      (funcall callback annotated-results)))
+                  nil 'silent)))
+
+(defun consult-web--brave-fetch-results (input callback)
+   (pcase-let* ((`(,query . ,args) (cw--split-command input))
+               (args (car-safe args))
+               (params `(("q" . ,(url-hexify-string query))
+                         ("count" . ,(format "%s" (or (plist-get args :count) cw--count)))
+                         ("page" . ,(format "%s" (or (plist-get args :page) 0)))))
+               (headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
+                          ("Accept" . "application/json")
+                          ("Accept-Encoding" . "gzip")
+                          ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-api-key))
+                          )))
+    (request consult-web-brave-url
+      :params params
+      :headers headers
+      :parser #'cw--url-parse-buffer
+      :success (cl-function (lambda (&key data &allow-other-keys)
+                              (when data
+                                (let* ((raw-results (map-nested-elt data '("web" "results")))
+                                       (annotated-items  (mapcar (lambda (item)
+                                                                   (let*
+                                                                       ((url (format "%s" (gethash "url" item)))
+                                                                        (title (format "%s" (gethash "title" item)))
+                                                                        (urlobj (and url (url-generic-parse-url url)))
+                                                                        (domain (and (url-p urlobj) (url-domain urlobj)))
+                                                                        (domain (and (stringp domain)
+                                                                                     (propertize domain 'face 'font-lock-variable-name-face)))
+                                                                        (path (and (url-p urlobj) (url-filename urlobj)))
+                                                                        (path (and (stringp path)
+                                                                                   (propertize path 'face 'font-lock-warning-face)))
+                                                                        (search-url (consult-web--make-url-string consult-web-brave-search-url params))
+
+                                                                        (decorated (concat title "\t"
+                                                                                           (propertize " " 'display '(space :align-to center))
+                                                                                           domain path
+                                                                                           )))
+                                                                     (propertize decorated
+                                                                                 :source "Brave"
+                                                                                 :title title
+                                                                                 :url url
+                                                                                 :search-url search-url
+                                                                                 :query query)))
+
+                                                                 raw-results)))
+                                  (puthash "candidates" annotated-items data)
+                                  ))))
+      :complete (cl-function (lambda (&key data &allow-other-keys)
+                  (funcall callback (gethash "candidates" data)))))))
+
+    (consult-web-define-source "Brave"
+                               :narrow-char ?b
+                               :face 'consult-web-engine-source-face
+                               :request #'consult-web--brave-fetch-results
+                               :preview-key consult-web-preview-key
+                               :search-history 'consult-web--search-history
+                               :selection-history 'consult-web--selection-history
+                               :dynamic 'both
+                               )
 #+end_src
 
 **** provide and footer

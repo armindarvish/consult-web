@@ -18,7 +18,6 @@
 
 (defvar consult-web-brave-autosuggest-api-url "https://api.search.brave.com/res/v1/suggest/search")
 
-
 (defcustom consult-web-brave-autosuggest-api-key nil
   "Key for Brave Autosuggest API.
 
@@ -27,66 +26,68 @@ See URL `https://brave.com/search/api/' for more info"
   :type '(choice (const :tag "Brave Autosuggest API Key" string)
                  (function :tag "Custom Function")))
 
-(cl-defun consult-web--brave-autosuggest-fetch-results (input &rest args &key count page &allow-other-keys)
-  "Fetch search results for INPUT from `consult-web-brave-autosuggest-api-url'.
-"
-  (let* ((count (or (and (integerp count) count)
-                    (and count (string-to-number (format "%s" count)))
-                    consult-web-default-count))
-         (page (or (and (integerp page) page)
-                   (and page (string-to-number (format "%s" page)))
-                   consult-web-default-page))
-         (params  `(("q" . ,input)
-                    ("count" . ,(format "%s" count))
-                    ("page" . ,(format "%s" page))
-                    ("country" . "US")))
-         (headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
-                    ("Accept" . "application/json")
-                    ("Accept-Encoding" . "gzip")
-                    ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-autosuggest-api-key))
-                    )))
-    (funcall consult-web-retrieve-backend
-     consult-web-brave-autosuggest-api-url
-     :params params
-     :headers headers
-     :parser
-     (lambda ()
-       (goto-char (point-min))
-       (buffer-substring (point-min) (point-max))
-       (let* ((content (json-parse-buffer))
-              (original (make-hash-table :test 'equal))
-              (_ (puthash "query" (gethash "original" (gethash "query" content)) original))
-              (suggestions (gethash "results" content)))
-         (cl-loop for a across (vconcat suggestions (vector original))
-                  collect
-                  (let ((table (make-hash-table :test 'equal))
-                        (word (gethash "query" a)))
-                    (puthash :url
-                             (concat "https://search.brave.com/search?q=" (url-hexify-string word)) table)
-                    (puthash :search-url nil
-                             table)
-                    (puthash :title
-                             word table)
-                    (puthash :source
-                             "Brave AutoSuggest" table)
-                    (puthash :query input
-                             table)
-                    table
-                    ))
+(defun consult-web--brave-autosuggest-fetch-results (input callback)
+  ""
+  (pcase-let* ((`(,query . ,args) (consult-web--split-command input))
+               (args (car-safe args))
+               (params  `(("q" . ,query)
+                          ("count" . ,(format "%s" (or (plist-get args :count) consult-web-default-count)))
+                          ("page" . ,(format "%s" (or (plist-get args :page) 0)))
+                          ("country" . "US")))
+               (headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
+                          ("Accept" . "application/json")
+                          ("Accept-Encoding" . "gzip")
+                          ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-autosuggest-api-key))
+                          )))
+    (consult-web--fetch-url-async consult-web-brave-autosuggest-api-url 'url
+                                  :params params
+                                  :headers headers
+                                  :parser #'consult-web--default-url-parse-buffer
+                                  :callback
+                                  (lambda (attrs)
+                                    (when-let* ((original (make-hash-table :test 'equal))
+                                                (_ (puthash "query" (gethash "original" (gethash "query" attrs)) original))
+                                                (raw-results  (append (map-nested-elt attrs '("results")) (list original)))
+                                                (annotated-results
+                                                 (mapcar (lambda (item)
+                                                           (let* ((source "Brave AutoSuggest")
+                                                                  (word (gethash "query" item))
+                                                                  (url (concat "https://search.brave.com/search?q="  (replace-regexp-in-string " " "+" word)))
+                                                                  (urlobj (and url (url-generic-parse-url url)))
+                                                                  (domain (and (url-p urlobj) (url-domain urlobj)))
+                                                                  (domain (and (stringp domain)
+                                                                               (propertize domain 'face 'font-lock-variable-name-face)))
+                                                                  (path (and (url-p urlobj) (url-filename urlobj)))
+                                                                  (path (and (stringp path)
+                                                                             (propertize path 'face 'font-lock-warning-face)))
+                                                                  (search-url nil)
+                                                                  (decorated (concat word "\t"
+                                                                                     (propertize " " 'display '(space :align-to center))
 
-         )
-       ))))
+                                                                                     )))
+                                                             (propertize decorated
+                                                                         :source source
+                                                                         :title word
+                                                                         :url url
+                                                                         :search-url search-url
+                                                                         :query query)))
+
+                                                         raw-results)))
+                                      (funcall callback annotated-results))))))
 
 (consult-web-define-source "Brave AutoSuggest"
                            :narrow-char ?B
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--brave-autosuggest-fetch-results
+                           :group #'consult-web--group-function
                            :on-preview #'ignore
-                           :on-return #'identity
+                           :on-return #'string-trim
                            :on-callback #'string-trim
                            :search-history 'consult-web--search-history
                            :selection-history t
-                           :dynamic t
+                           :enabled (lambda () #'my:brave-autosuggest-key)
+                           :sort t
+                           :dynamic 'both
                            )
 
 ;;; provide `consult-web-brave-autosuggest' module
