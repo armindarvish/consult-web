@@ -27,15 +27,13 @@
 #+begin_src emacs-lisp
 ;;; Requirements
 (eval-when-compile
-(require 'url)
-(when (featurep 'json)
-  (require 'json))
-(when (featurep 'request)
-  (require 'request))
-)
-
-(require 'consult)
-
+  (require 'consult)
+  (require 'url)
+  (when (featurep 'json)
+    (require 'json))
+  (when (featurep 'request)
+    (require 'request))
+  )
 #+end_src
 
 
@@ -565,7 +563,7 @@ Ommits keys in IGNORE-KEYS."
 
 ******* error-handler
 #+begin_src emacs-lisp
-(defun consult-web--url-retrieve-error-handler (_)
+(defun consult-web--url-retrieve-error-handler (&rest args)
   "Handles errors for consult-web-url-retrieve functions."
   (message "consult-web: url-retrieve got an error: %s" (consult-web--parse-http-response)))
 #+end_src
@@ -774,7 +772,7 @@ Refer to `request' documents for details."
 #+begin_src emacs-lisp
 (defun consult-web--default-url-parse-buffer ()
 ""
-(goto-char (point-min))
+(goto-char (or url-http-end-of-headers (point-min)))
 (json-parse-buffer :object-type 'hash-table :array-type 'list :false-object :false :null-object :null))
 #+end_src
 ****** fetch url
@@ -967,7 +965,7 @@ For more info on annotation refer to `consult' manual, particularly 'consult--re
 
 This is passed as GROUP to `consult--read' on candidates and is used to define the grouping for CAND. "
   (if transform (substring cand)
-    (let* ((group-by (or group-by consult-web--override-group-by consult-web-group-by))
+    (let* ((group-by (or consult-web--override-group-by group-by consult-web-group-by))
            (group-by (if (not (keywordp group-by)) (intern (concat ":" (format "%s" group-by))) group-by)))
       (cond
        ((equal group-by :domain)
@@ -1074,29 +1072,29 @@ candidate. Refer to `consult--read' documentation for more details."
 ***** dynamic state function
 #+begin_src emacs-lisp
 (defun consult-web--dynamic-state-function ()
-"State function for `consult-web' minibuffer candidates.
+  "State function for `consult-web' minibuffer candidates.
 
 This is passed as STATE to `consult--read' on candidates and is used
 to define actions that happen when a candidate is previewed or
 selected.
 The preview and retrun actions are retrieve from `consult-web-sources-alist'."
-  (lambda (action cand &rest args)
-    (if cand
-        (let* ((source (get-text-property 0 :source cand))
-               (state (plist-get (cdr (assoc source consult-web-sources-alist)) :state))
-               (preview (plist-get (cdr (assoc source consult-web-sources-alist)) :on-preview))
-               (return (plist-get (cdr (assoc source consult-web-sources-alist)) :on-return)))
-          (if state
-              (funcall state action cand args)
+  (let ((buffer-preview (consult--buffer-preview)))
+    (lambda (action cand &rest args)
+      (if cand
+          (let* ((source (get-text-property 0 :source cand))
+                 (state (plist-get (cdr (assoc source consult-web-sources-alist)) :state))
+                 (preview (plist-get (cdr (assoc source consult-web-sources-alist)) :on-preview))
+                 (return (plist-get (cdr (assoc source consult-web-sources-alist)) :on-return)))
+            (if state
+                (funcall state action cand args)
               (pcase action
+                ('exit (funcall buffer-preview 'exit cand))
                 ('preview
                  (if preview (funcall preview cand) (consult-web--default-url-preview cand)))
                 ('return
-                 (if return (funcall return cand) cand))
-                ))
-          )))
-    )
-
+                 (print cand)
+                 (if return (funcall return cand) cand)))
+              ))))))
 #+end_src
 **** callback
 #+begin_src emacs-lisp
@@ -1295,6 +1293,40 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
     (list (or query input) args)
     ))
 #+end_src
+**** multi-lookup
+#+begin_src emacs-lisp
+(defun consult-web--multi-lookup (sources selected candidates _input narrow &rest _)
+  "Lookup SELECTED in CANDIDATES given SOURCES, with potential NARROW."
+  (if (or (string-blank-p selected)
+          (not (consult--tofu-p (aref selected (1- (length selected))))))
+      ;; Non-existing candidate without Tofu or default submitted (empty string)
+      (let* ((src (cond
+                   (narrow (seq-find (lambda (src)
+                                       (let ((n (plist-get src :narrow)))
+                                         (eq (or (car-safe n) n -1) narrow)))
+                                     sources))
+                   ((seq-find (lambda (src) (plist-get src :default)) sources))
+                   ((seq-find (lambda (src) (not (plist-get src :hidden))) sources))
+                   ((aref sources 0))))
+             (idx (seq-position sources src))
+             (def (and (string-blank-p selected) ;; default candidate
+                       (seq-find (lambda (cand) (eq idx (consult--tofu-get cand))) candidates))))
+        (if def
+            (cons (cdr (get-text-property 0 'multi-category def)) src)
+          `(,selected :match nil ,@src)))
+    (let* ((found (member selected candidates))
+           (info (if found (or (car found) "") ""))
+           (title (get-text-property 0 :title info))
+           (url (get-text-property 0 :url info))
+           )
+      (if found
+        ;; Existing candidate submitted
+        (cons (apply #'propertize (or title url "nil") (or (text-properties-at 0 info) (list)))
+              (consult--multi-source sources selected))
+      ;; Non-existing Tofu'ed candidate submitted, e.g., via Embark
+      `(,(substring selected 0 -1) :match nil ,@(consult--multi-source sources selected))))))
+
+#+end_src
 **** muli-group
 #+begin_src emacs-lisp
 (defun consult-web--multi-group (sources cand transform)
@@ -1312,58 +1344,38 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
        (t
         (plist-get (consult--multi-source sources cand) :name))))))
 #+end_src
-**** multi-async
+**** multi-predicate
+***** multi-predicate
 #+begin_src emacs-lisp
-(defun cw--multi-async (async sources)
-  "Merge the results of (a)sync SOURCES and pass it to function ASYNC."
-  (let ((candidates (make-vector (length sources) nil)))
-    (lambda (action)
-      (pcase action
-        ((pred stringp)
-         (unless (equal action "")
-           (let ((idx 0))
-             (seq-doseq (src sources)
-               (let* ((face (and (plist-member src :face) `(face ,(plist-get src :face))))
-                      (cat (plist-get src :category))
-                      (items (plist-get src :items))
-                      (narrow (plist-get src :narrow))
-                      (type (or (car-safe narrow) narrow -1))
-                      (pos idx))
-                 (when (or (eq consult--narrow type)
-                           (not (or consult--narrow (plist-get src :hidden))))
-                   (condition-case nil
-                       (progn
-                         (when (functionp items)
-                           (cond
-                            ((< (cdr (func-arity items)) 1)
-                             (setq items (funcall items))
-                             (aset candidates idx    ; sync source, refresh now
-                               (and items (cw--multi-propertize
-                                           items cat idx face)))
-                             (funcall async 'flush)
-                             (funcall async (apply #'append (append candidates nil))))
-                            ((< (cdr (func-arity items)) 2)
-                             (setq items (funcall items action))
-                             (aset candidates idx    ; sync source, refresh now
-                                   (and items (cw--multi-propertize
-                                               items cat idx face)))
-                             (funcall async 'flush)
-                             (funcall async (apply #'append (append candidates nil))))
-                            ((< (cdr (func-arity items)) 3)
-                             (funcall items action      ; async source, refresh in callback
-                               (lambda (response-items)
-                                 (when response-items
-                                   (aset candidates pos
-                                         (cw--multi-propertize response-items cat pos face))
-                                   (funcall async 'flush)
-                                   (funcall async (apply #'append (append candidates nil))))))))
-                            ))
-                     (t
-                      (message "calling :items in %s source produced error" src))
-                     )))
-               (cl-incf idx)))))
-        (_ (funcall async action))))))
+(defun consult-web--multi-predicate (sources cand)
+  "Predicate function called for each candidate CAND given SOURCES."
+  (let* ((src (consult--multi-source sources cand))
+         (narrow (plist-get src :narrow))
+         (type (or (car-safe narrow) narrow -1))
+         (pred (plist-get src :predicate))
+         (show t)
+         )
+    (if pred
+        (cond
+         ((booleanp pred)
+          (setq show pred))
+         ((and (functionp pred) (> (car (func-arity pred)) 0))
+          (setq show (funcall pred cand)))))
+      (and show
+           (or (eq consult--narrow type)
+               (not (or consult--narrow (plist-get src :hidden)))))))
 #+end_src
+***** filter by minibuffer content
+#+begin_src emacs-lisp
+(defun consult-web--match-minibuffer-content-p (cand)
+  (let* ((win (active-minibuffer-window))
+        (buffer (window-buffer win))
+        (split-char (plist-get (consult--async-split-style) :initial)))
+  (with-current-buffer buffer
+    (if (minibuffer-window-active-p win)
+        (string-match (concat ".*" (string-trim (car-safe (consult-web--split-command (minibuffer-contents-no-properties))) split-char "\n") ".*") (substring-no-properties cand))))))
+#+end_src
+
 **** multi-propertize
 #+begin_src emacs-lisp
 
@@ -1389,9 +1401,216 @@ POS and CATEGORY are the group ID and category for these items."
 (defun consult-web--multi-annotate (sources cand)
   (let ((src (consult--multi-source sources cand)))
     (if-let ((fun (plist-get src :annotate)))
-        (funcall fun (cdr (get-text-property 0 'multi-category cand)))
-      (plist-get src :name)
+        (cond
+         ((functionp fun)
+          (funcall fun (cdr (get-text-property 0 'multi-category cand))))
+         ((and (symbolp fun) (functionp (eval fun)))
+          (funcall (eval fun) (cdr (get-text-property 0 'multi-category cand)))))
       )))
+#+end_src
+**** multi-dynamic-candidates-update
+#+begin_src emacs-lisp
+(defun cosnult-web--multi-dynamic-candidates-update (async sources candidates input)
+    (let ((idx 0))
+      (seq-doseq (src sources)
+        (let* ((face (and (plist-member src :face) `(face ,(plist-get src :face))))
+               (cat (plist-get src :category))
+               (items (plist-get src :items))
+               (narrow (plist-get src :narrow))
+               (type (or (car-safe narrow) narrow -1))
+               (pos idx))
+          (when (or (eq consult--narrow type)
+                    (not (or consult--narrow (plist-get src :hidden))))
+            (condition-case nil
+                (progn
+                  (when (functionp items)
+                    (cond
+                     ((< (cdr (func-arity items)) 1)
+                      (setq items (funcall items))
+                      (aset candidates idx    ; sync source, refresh now
+                            (and items (consult-web--multi-propertize
+                                        items cat idx face)))
+                      (funcall async 'flush)
+                      (funcall async (apply #'append (append candidates nil)))
+                      )
+                     ((< (cdr (func-arity items)) 2)
+                      (setq items (funcall items input))
+                      (aset candidates idx    ; sync source, refresh now
+                            (and items (consult-web--multi-propertize
+                                        items cat idx face)))
+                      (funcall async 'flush)
+                      (funcall async (apply #'append (append candidates nil)))
+                      )
+                     ((< (cdr (func-arity items)) 3)
+                      (if input (funcall items input      ; async source, refresh in callback
+                               (lambda (response-items)
+                                 (when response-items
+                                   (aset candidates pos
+                                         (consult-web--multi-propertize response-items cat pos face))
+                                   (funcall async 'flush)
+                                   (funcall async (apply #'append (append candidates nil)))
+                                   ))))))
+                    ))
+              (t
+               (message "calling :items in %s source produced error" src)
+               nil)
+              )))
+        (cl-incf idx))
+      candidates)
+  )
+
+#+end_src
+
+**** multi-dynamic-compute
+#+begin_src emacs-lisp
+(defun consult-web--multi-dynamic-compute (async sources &optional debounce)
+  "Dynamic computation of candidates.
+ASYNC is the sink.
+FUN computes the candidates given the input.
+DEBOUNCE is the time after which an interrupted computation
+should be restarted."
+  (setq debounce (or debounce consult-async-input-debounce))
+  (setq async (consult--async-indicator async))
+  (let* ((request) (current) (timer)
+         (candidates (make-vector (length sources) nil))
+         (cancel (lambda () (when timer (cancel-timer timer) (setq timer nil))))
+         (start (lambda (req) (setq request req) (funcall async 'refresh)))
+         (fun (apply-partially #'cosnult-web--multi-dynamic-candidates-update async sources))
+         )
+    (lambda (action)
+      (pcase action
+        ((and 'nil (guard (not request)))
+         (funcall async nil))
+        ('nil
+         (funcall cancel)
+         (let ((state 'killed))
+           (unwind-protect
+               (progn
+                 (funcall async 'indicator 'running)
+                 (redisplay)
+                 ;; Run computation
+                 (let* ((response (funcall fun candidates request)))
+                   ;; Flush and update candidate list
+                       (setq candidates response)
+                       (if (or (equal response 'nil) (equal response [nil]))
+                           (funcall async 'flush)
+                         (funcall async 'nil))
+                       (setq state 'finished
+                         current request)
+                     ))
+             (funcall async 'indicator state)
+             ;; If the computation was killed, restart it after some time.
+             (when (eq state 'killed)
+               (setq timer (run-at-time debounce nil start request)))
+             (setq request nil))))
+        ((pred stringp)
+         (funcall cancel)
+         (if (or (equal action "") (equal action current))
+               (funcall async 'indicator 'finished)
+           (funcall start action)))
+        ('destroy
+         (funcall cancel)
+         (funcall async 'destroy))
+        (_ (funcall async action))))))
+
+#+end_src
+**** multi--sink
+#+begin_src emacs-lisp
+(defun consult-web--async-sink ()
+  "Create ASYNC sink function.
+
+An async function must accept a single action argument.  For the
+\\='setup action it is guaranteed that the call originates from
+the minibuffer.  For the other actions no assumption about the
+context can be made.
+
+\\='setup   Setup the internal closure state.  Return nil.
+\\='destroy Destroy the internal closure state.  Return nil.
+\\='flush   Flush the list of candidates.  Return nil.
+\\='refresh Request UI refresh.  Return nil.
+nil      Return the list of candidates.
+list     Append the list to the already existing candidates list and return it.
+string   Update with the current user input string.  Return nil."
+  (let (candidates last buffer)
+    (lambda (action)
+      (pcase-exhaustive action
+        ('setup
+         (setq buffer (current-buffer))
+         nil)
+        ((or (pred stringp) 'destroy) nil)
+        ('flush (setq candidates nil last nil))
+        ('refresh
+         ;; Refresh the UI when the current minibuffer window belongs
+         ;; to the current asynchronous completion session.
+         (when-let (win (active-minibuffer-window))
+           (when (eq (window-buffer win) buffer)
+             (with-selected-window win
+               (run-hooks 'consult--completion-refresh-hook)
+               ;; Interaction between asynchronous completion functions and
+               ;; preview: We have to trigger preview immediately when
+               ;; candidates arrive (gh:minad/consult#436).
+               (when (and consult--preview-function candidates)
+                 (funcall consult--preview-function)))))
+         nil)
+        ('nil candidates)
+        ((pred consp)
+         (setq last (last (if last (setcdr last action) (setq candidates action))))
+         candidates)))))
+
+#+end_src
+
+
+**** multi-async
+#+begin_src emacs-lisp
+(defun consult-web--multi-async (async sources)
+  "Merge the results of (a)sync SOURCES and pass it to function ASYNC."
+  (let ((candidates (make-vector (length sources) nil)))
+    (lambda (action)
+      (pcase action
+        ((pred stringp)
+         (unless (equal action "")
+           (let ((idx 0))
+             (seq-doseq (src sources)
+               (let* ((face (and (plist-member src :face) `(face ,(plist-get src :face))))
+                      (cat (plist-get src :category))
+                      (items (plist-get src :items))
+                      (narrow (plist-get src :narrow))
+                      (type (or (car-safe narrow) narrow -1))
+                      (pos idx))
+                 (when (or (eq consult--narrow type)
+                           (not (or consult--narrow (plist-get src :hidden))))
+                   (condition-case nil
+                       (progn
+                         (when (functionp items)
+                           (cond
+                            ((< (cdr (func-arity items)) 1)
+                             (setq items (funcall items))
+                             (aset candidates idx    ; sync source, refresh now
+                               (and items (consult-web--multi-propertize
+                                           items cat idx face)))
+                             (funcall async 'flush)
+                             (funcall async (apply #'append (append candidates nil))))
+                            ((< (cdr (func-arity items)) 2)
+                             (setq items (funcall items action))
+                             (aset candidates idx    ; sync source, refresh now
+                                   (and items (consult-web--multi-propertize
+                                               items cat idx face)))
+                             (funcall async 'flush)
+                             (funcall async (apply #'append (append candidates nil))))
+                            ((< (cdr (func-arity items)) 3)
+                             (funcall items action      ; async source, refresh in callback
+                               (lambda (response-items)
+                                 (when response-items
+                                   (aset candidates pos
+                                         (consult-web--multi-propertize response-items cat pos face))
+                                   (funcall async 'flush)
+                                   (funcall async (apply #'append (append candidates nil))))))))
+                            ))
+                     (t
+                      (message "calling :items in %s source produced error" src))
+                     )))
+               (cl-incf idx)))))
+        (_ (funcall async action))))))
 #+end_src
 **** consult-web--multi
 #+begin_src emacs-lisp
@@ -1401,9 +1620,9 @@ POS and CATEGORY are the group ID and category for these items."
           (apply #'consult--read
                  (consult--async-split
                   (consult--async-throttle
-                   (consult-web--multi-async
+                   (consult-web--multi-dynamic-compute
                     (consult--async-refresh-timer
-                     (consult--async-sink))
+                    (consult--async-sink))
                     sources)))
                  (append
                   options
@@ -1412,10 +1631,10 @@ POS and CATEGORY are the group ID and category for these items."
                    :history     'consult-web--search-history
                    :initial     (consult--async-split-initial nil)
                    :category    'multi-category
-                   :predicate   (apply-partially #'consult--multi-predicate sources)
+                   :predicate   (apply-partially #'consult-web--multi-predicate sources)
                    :annotate    (apply-partially #'consult-web--multi-annotate sources)
                    :group       (apply-partially #'consult-web--multi-group sources)
-                   :lookup      (apply-partially #'consult--multi-lookup sources)
+                   :lookup      (apply-partially #'consult-web--multi-lookup sources)
                    :preview-key (consult--multi-preview-key sources)
                    :narrow      (consult--multi-narrow sources)
                    :state       (consult--multi-state sources))))))
@@ -1473,7 +1692,7 @@ This is used to make docstring for function made by `consult-web-define-source'.
 #+end_src
 *** make a consult--read source list
 #+begin_src emacs-lisp
-(defun consult-web--make-source-list (source-name request format annotate face narrow-char state preview-key category lookup sort enabled selection-history)
+(defun consult-web--make-source-list (source-name request format annotate face narrow-char state preview-key category lookup group sort enabled selection-history)
   "Internal function to make a source for `consult--multi'.
 
 Do not use this function directly, use `consult-web-define-source' macro
@@ -1493,18 +1712,18 @@ instead."
                                      (append (mapcar (lambda (thing) (consult-web-dynamic--split-thingatpt thing))
                                              (list 'number 'word 'sexp 'symbol 'url 'filename 'sentence 'line)) (list isearch-string))))
           :items  ,request
-
           :annotate ,(cond
                       ((and annotate (functionp annotate))
                        annotate)
                       ((eq annotate t)
                        #'consult-web--annotate-function)
                       (t nil))
-          :lookup (if (and lookup (functionp lookup))
+          :lookup ,(if (and lookup (functionp lookup))
                       lookup
                     (consult-web--lookup-function))
+          :group ,(or group #'consult-web--group-function)
           :preview-key ,(and consult-web-show-preview (or preview-key consult-web-preview-key))
-          :enabled (if enabled ,enabled t)
+          :enabled ,(or enabled t)
           :sort ,sort
           ))
 #+end_src
@@ -1519,34 +1738,15 @@ instead."
   (let* ((input (or input
                     (and consult-web-default-autosuggest-command (funcall-interactively consult-web-default-autosuggest-command))
                     (consult-web--read-search-string)))
-         (selected
-          (consult--read (funcall #'consult-web--format-candidates-list (funcall  request input args) format face)
-                         :state (or state (consult-web--dynamic-state-function))
-                         :require-match nil
-                         :prompt (concat "[" (propertize (format "%s" (consult-web--func-name source-name)) 'face 'consult-web-prompt-face) "]" " Search:  ")
-                         :sort sort
-                         :history (cond
-                                   ((eq selection-history-var nil)
-                                    nil)
-                                   ((eq selection-history-var t)
-                                    t)
-                                   ((symbolp selection-history-var)
-                                    selection-history-var))
-                         :add-history (delq nil
-                                            (cl-remove-duplicates
-                                             (append (mapcar (lambda (thing) (consult-web-dynamic--split-thingatpt thing))
-                                                             (list 'number 'word 'sexp 'symbol 'url 'filename 'sentence 'line)) (list isearch-string))))
-                         :group (if (functionp consult-web-group-by) consult-web-group-by (apply-partially #'consult-web--group-function consult-web-group-by))
-                         :category (or category 'consult-web)
-                         :lookup (if (and lookup (functionp lookup))
-                                     lookup
-                                   (consult-web--lookup-function))
-                         :annotate (cond
-                                    ((and annotate (functionp annotate)) annotate)
-                                    ((eq annotate t) #'consult-web--annotate-function)
-                                    (t nil))
-                         :preview-key (and consult-web-show-preview (or preview-key consult-web-preview-key))
-                         ))
+         (consult-async-input-throttle consult-web-dynamic-input-throttle)
+         (consult-async-input-debounce consult-web-dynamic-input-debounce)
+         (consult-async-refresh-delay consult-web-dynamic-refresh-delay)
+         (selected (consult-web--multi-dynamic (list (consult-web--source-name source-name))
+                                      :prompt (concat "[" (propertize (format "%s" (consult-web--func-name source-name)) 'face 'consult-web-prompt-face) "]" " Search:  ")
+                                      :initial (consult--async-split-initial input)))
+         (selected (cond
+                    ((consp selected) (car selected))
+                    (t selected)))
          (source (get-text-property 0 :source selected))
          )
     (unless no-callback
@@ -1566,10 +1766,15 @@ Do not use this function directly, use `consult-web-define-source' macro
   (let* ((consult-async-refresh-delay consult-web-dynamic-refresh-delay)
          (consult-async-input-throttle consult-web-dynamic-input-throttle)
          (consult-async-input-debounce consult-web-dynamic-input-debounce)
-         (prompt (concat "[" (propertize (format "%s" (consult-web--func-name source-name "dynamic-")) 'face 'consult-web-prompt-face) "]" " Search:  "))
-         (collection (consult-web-dynamic--collection (list
-                                                       request) nil face nil args))
-         (selected (consult-web-dynamic--internal prompt collection initial category lookup search-history-var preview-key))
+         (prompt (concat "[" (propertize (format "%s" (consult-web--func-name source-name)) 'face 'consult-web-prompt-face) "]" " Search:  "))
+         (selected (consult-web--multi-dynamic (list (consult-web--source-name source-name))
+                                      :prompt prompt
+                                      :history '(:input search-history-var)
+                                      :initial (consult--async-split-initial initial)
+                                      ))
+         (selected (cond
+                    ((consp selected) (car selected))
+                    (t selected)))
          (source (get-text-property 0 :source selected))
          (title (get-text-property 0 :title selected)))
     (add-to-history selection-history-var title)
@@ -1578,28 +1783,6 @@ Do not use this function directly, use `consult-web-define-source' macro
       )
     selected
     ))
-
-(defun consult-web--call-dynamic-command (initial no-callback args source-name request category face lookup search-history-var selection-history-var preview-key)
-  "Internal function to make dynamic `consult--read' command.
-
-Do not use this function directly, use `consult-web-define-source' macro
- instead."
-  (let* ((consult-async-refresh-delay consult-web-dynamic-refresh-delay)
-         (consult-async-input-throttle consult-web-dynamic-input-throttle)
-         (consult-async-input-debounce consult-web-dynamic-input-debounce)
-         (prompt (concat "[" (propertize (format "%s" (consult-web--func-name source-name "dynamic-")) 'face 'consult-web-prompt-face) "]" " Search:  "))
-         (selected (consult-web--multi-dynamic (list request)
-                                                :prompt prompt
-                                                ))
-         (source (get-text-property 0 :source selected))
-         (title (get-text-property 0 :title selected)))
-    (add-to-history selection-history-var title)
-    (unless no-callback
-      (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-callback) selected)
-      )
-    selected
-    ))
-
 #+end_src
 *** macro to add a new source
 #+begin_src emacs-lisp
@@ -1724,12 +1907,12 @@ variable that this macro creates for %s=SOURCE-NAME.
   `(progn
 
      ;; make a variable called consult-web--source-%s (%s=source-name)
-     (defvar ,(consult-web--source-name source-name) t)
+     (defvar ,(consult-web--source-name source-name) (consult-web--make-source-list ,source-name ,request ,format ,annotate ,face ,narrow-char ,state ,preview-key ,category ,lookup ,group ,sort ,enabled ,selection-history))
 
      ;; make a function that creates a consult--read source for consult-web-multi
      (defun ,(consult-web--source-name source-name "-list") (input &rest args)
        ,(or docstring (consult-web--source-generate-docstring source-name))
-       (consult-web--make-source-list ,source-name ,request ,format ,annotate ,face ,narrow-char ,state ,preview-key ,category ,lookup ,sort ,enabled ,selection-history)
+       (consult-web--make-source-list ,source-name ,request ,format ,annotate ,face ,narrow-char ,state ,preview-key ,category ,lookup ,group ,sort ,enabled ,selection-history)
        )
 
      ;; make a static interactive command consult-web-%s (%s=source-name)
@@ -1737,7 +1920,7 @@ variable that this macro creates for %s=SOURCE-NAME.
        (defun ,(consult-web--func-name source-name) (&optional input no-callback &rest args)
          ,(or docstring (consult-web--func-generate-docstring source-name))
          (interactive "P")
-         (consult-web--call-static-command input no-callback args ,request ,format ,face ,state ,source-name ,category ,lookup ,selection-history ,annotate ,preview-key ,on-callback)
+         (consult-web--call-static-command input no-callback args ,request ,format ,face ,state ,source-name ,category ,lookup ,selection-history ,annotate ,preview-key ,on-callback ,sort)
          ))
 
      ;; make a dynamic interactive command consult-web-dynamic-%s (%s=source-name)
@@ -1770,6 +1953,8 @@ variable that this macro creates for %s=SOURCE-NAME.
                                                                 :selection-history ,selection-history
                                                                 :interactive-static (and (functionp (consult-web--func-name ,source-name)) (consult-web--func-name ,source-name))
                                                                 :interactive-dynamic (and (functionp (consult-web--func-name ,source-name "dynamic-")) (consult-web--func-name ,source-name "dynamic-"))
+                                                                :enabled ,enabled
+                                                                :sort ,sort
                                                                 )))
 
      ,source-name))
@@ -2299,24 +2484,8 @@ Gets the preview function from `consult-web-sources-alist'."
 **** define all source modules
 #+begin_src emacs-lisp
 (setq consult-web-sources--all-modules-list
-      (list 'consult-web-bing
-            'consult-web-brave
-            'consult-web-brave-autosuggest
-            'consult-web-buffer
-            'consult-web-chatgpt
-            'consult-web-doi
-            'consult-web-duckduckgo
-            'consult-web-elfeed
-            'consult-web-google
-            'consult-web-google-autosuggest
-            'consult-web-gptel
-            'consult-web-line-multi
-            'consult-web-notes
-            'consult-web-pubmed
-            'consult-web-scopus
-            'consult-web-stackoverflow
-            'consult-web-wikipedia
-            'consult-web-youtube))
+      (list 'consult-web-brave-autosuggest
+            'consult-web-brave))
 #+end_src
 **** add individual or list of sources
 #+begin_src emacs-lisp
@@ -2383,52 +2552,56 @@ See URL `https://brave.com/search/api/' for more info"
                  (function :tag "Custom Function")))
 
 
-
 (defun consult-web--brave-fetch-results (input callback)
   ""
-  (pcase-let* ((`(,query . ,args) (cw--split-command input))
+  (pcase-let* ((`(,query . ,args) (consult-web--split-command input))
                (args (car-safe args))
                (params `(("q" . ,(url-hexify-string query))
-                         ("count" . ,(format "%s" (or (plist-get args :count) cw--count)))
+                         ("count" . ,(format "%s" (or (plist-get args :count) consult-web-default-count)))
                          ("page" . ,(format "%s" (or (plist-get args :page) 0)))))
                (headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
                           ("Accept" . "application/json")
                           ("Accept-Encoding" . "gzip")
                           ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-api-key))
                           )))
-    ( consult-web--fetch-url-async consult-web-brave-url 'url
-                                     :encoding 'utf-8
-                                     :params params
-                                     :headers headers
-                                     :parser #'consult-web--default-url-parse-buffer
-                                     :callback (lambda (attrs)
-                                                 (when-let* ((raw-results (map-nested-elt attrs '("web" "results")))
-                                                             (annotated-results  (mapcar (lambda (item)
-                                                                                           (let*
-                                                                                               ((url (format "%s" (gethash "url" item)))
-                                                                                                (title (format "%s" (gethash "title" item)))
-                                                                                                (urlobj (and url (url-generic-parse-url url)))
-                                                                                                (domain (and (url-p urlobj) (url-domain urlobj)))
-                                                                                                (domain (and (stringp domain)
-                                                                                                             (propertize domain 'face 'font-lock-variable-name-face)))
-                                                                                                (path (and (url-p urlobj) (url-filename urlobj)))
-                                                                                                (path (and (stringp path)
-                                                                                                           (propertize path 'face 'font-lock-warning-face)))
-                                                                                                (search-url nil)
+    (consult-web--fetch-url-async consult-web-brave-url 'url
+      :encoding 'utf-8
+      :params params
+      :headers headers
+      :parser #'consult-web--default-url-parse-buffer
+      :callback
+      (lambda (attrs)
+        (when-let* ((raw-results (map-nested-elt attrs '("web" "results")))
+                    (annotated-results
+                     (mapcar (lambda (item)
+                               (let*
+                                   ((source "Brave")
+                                    (url (format "%s" (gethash "url" item)))
+                                    (title (format "%s" (gethash "title" item)))
+                                    (title (and (stringp title)
+                                                (propertize title 'face 'consult-web-engine-source-face)))
+                                    (urlobj (and url (url-generic-parse-url url)))
+                                    (domain (and (url-p urlobj) (url-domain urlobj)))
+                                    (domain (and (stringp domain)
+                                                 (propertize domain 'face 'font-lock-variable-name-face)))
+                                    (path (and (url-p urlobj) (url-filename urlobj)))
+                                    (path (and (stringp path)
+                                               (propertize path 'face 'font-lock-warning-face)))
+                                    (search-url nil)
 
-                                                                                                (decorated (concat title "\t"
-                                                                                                                   (propertize " " 'display '(space :align-to center))
-                                                                                                                   domain path
-                                                                                                                   )))
-                                                                                             (propertize decorated
-                                                                                                         :source "Brave"
-                                                                                                         :title title
-                                                                                                         :url url
-                                                                                                         :search-url search-url
-                                                                                                         :query query)))
+                                    (decorated (concat title "\t"
+                                                       (propertize " " 'display '(space :align-to center))
+                                                       domain path " "
+                                                       )))
+                                 (propertize decorated
+                                             :source source
+                                             :title title
+                                             :url url
+                                             :search-url search-url
+                                             :query query)))
 
-                                                                                         raw-results)))
-                                                   (funcall callback annotated-results))))))
+                             raw-results)))
+          (funcall callback annotated-results))))))
 
 (consult-web-define-source "Brave"
                            :narrow-char ?b
@@ -2437,9 +2610,11 @@ See URL `https://brave.com/search/api/' for more info"
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () cw-brave-api-key)
+                           :enabled (lambda () #'my:brave-key)
+                           :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both
+                           :annotate nil
                            )
 #+end_src
 
@@ -2452,44 +2627,113 @@ See URL `https://brave.com/search/api/' for more info"
 (add-to-list 'consult-web-sources-modules-to-load 'consult-web-brave)
 ;;; consult-web-brave.el ends here
 #+end_src
-
-
-
-
-* test
+*** Brave AutoSuggest
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-brave-autosuggest.el
+:END:
+**** header
 #+begin_src emacs-lisp
-(defun cw-search ()
-  (interactive)
-  (let ((consult-async-input-throttle 1.0)
-        (consult-async-input-debounce 0.5))
-    (cw--multi (list cw-source-brave
-                     consult-notes-org-headings--source
-                     consult-notes-org-roam--nodes
-                     consult--source-buffer)
-               :prompt "Search: "
-               :sort t
-               )))
+;;; consult-web-brave-autosuggest.el --- Consulting Brave Autosuggest -*- lexical-binding: t -*-
 
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
 #+end_src
 
-#+RESULTS:
-: cw-search
-
+**** brave autosuggest
 #+begin_src emacs-lisp
-(consult-web--make-source-list "Brave"
-                               #'consult-web--brave-fetch-results
-                               nil
-                               nil
-                               'consult-web-engine-source-face
-                               ?b
-                               nil
-                               consult-web-preview-key
-                               nil
-                               nil
-                               t
-                               nil
-                               'consult-web--selection-history)
-#+end_src
+(defvar consult-web-brave-autosuggest-api-url "https://api.search.brave.com/res/v1/suggest/search")
 
-#+RESULTS:
-| :name | Brave | nil | nil | :narrow | 98 | :state | consult-web--dynamic-state-function | :category | consult-web | :history | consult-web--selection-history | :add-history | (delq nil (cl-remove-duplicates (append (mapcar (lambda (thing) (consult-web-dynamic--split-thingatpt thing)) (list 'number 'word 'sexp 'symbol 'url 'filename 'sentence 'line)) (list isearch-string)))) | :items | consult-web--brave-fetch-results | :annotate | nil | :lookup | (if (and lookup (functionp lookup)) lookup (consult-web--lookup-function)) | :preview-key | C-o | :enabled | (if enabled nil t) | :sort | t |
+(defcustom consult-web-brave-autosuggest-api-key nil
+  "Key for Brave Autosuggest API.
+
+See URL `https://brave.com/search/api/' for more info"
+  :group 'consult-web
+  :type '(choice (const :tag "Brave Autosuggest API Key" string)
+                 (function :tag "Custom Function")))
+
+(defun consult-web--brave-autosuggest-fetch-results (input callback)
+  ""
+  (pcase-let* ((`(,query . ,args) (consult-web--split-command input))
+               (args (car-safe args))
+               (params  `(("q" . ,query)
+                          ("count" . ,(format "%s" (or (plist-get args :count) consult-web-default-count)))
+                          ("page" . ,(format "%s" (or (plist-get args :page) 0)))
+                          ("country" . "US")))
+               (headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
+                          ("Accept" . "application/json")
+                          ("Accept-Encoding" . "gzip")
+                          ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-autosuggest-api-key))
+                          )))
+    (consult-web--fetch-url-async consult-web-brave-autosuggest-api-url 'url
+                                  :params params
+                                  :headers headers
+                                  :parser #'consult-web--default-url-parse-buffer
+                                  :callback
+                                  (lambda (attrs)
+                                    (when-let* ((original (make-hash-table :test 'equal))
+                                                (_ (puthash "query" (gethash "original" (gethash "query" attrs)) original))
+                                                (raw-results  (append (map-nested-elt attrs '("results")) (list original)))
+                                                (annotated-results
+                                                 (mapcar (lambda (item)
+                                                           (let* ((source "Brave AutoSuggest")
+                                                                  (word (gethash "query" item))
+                                                                  (url (concat "https://search.brave.com/search?q="  (replace-regexp-in-string " " "+" word)))
+                                                                  (urlobj (and url (url-generic-parse-url url)))
+                                                                  (domain (and (url-p urlobj) (url-domain urlobj)))
+                                                                  (domain (and (stringp domain)
+                                                                               (propertize domain 'face 'font-lock-variable-name-face)))
+                                                                  (path (and (url-p urlobj) (url-filename urlobj)))
+                                                                  (path (and (stringp path)
+                                                                             (propertize path 'face 'font-lock-warning-face)))
+                                                                  (search-url nil)
+                                                                  (decorated (concat word "\t"
+                                                                                     (propertize " " 'display '(space :align-to center))
+
+                                                                                     )))
+                                                             (propertize decorated
+                                                                         :source source
+                                                                         :title word
+                                                                         :url url
+                                                                         :search-url search-url
+                                                                         :query query)))
+
+                                                         raw-results)))
+                                      (funcall callback annotated-results))))))
+
+(consult-web-define-source "Brave AutoSuggest"
+                           :narrow-char ?B
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--brave-autosuggest-fetch-results
+                           :group #'consult-web--group-function
+                           :on-preview #'ignore
+                           :on-return #'string-trim
+                           :on-callback #'string-trim
+                           :search-history 'consult-web--search-history
+                           :selection-history t
+                           :enabled (lambda () #'my:brave-autosuggest-key)
+                           :sort t
+                           :dynamic 'both
+                           )
+#+end_src
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-brave-autosuggest' module
+
+(provide 'consult-web-brave-autosuggest)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-brave-autosuggest)
+;;; consult-web-brave-autosuggest.el ends here
+#+end_src

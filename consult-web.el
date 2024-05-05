@@ -16,7 +16,6 @@
 
 ;;; Requirements
 (eval-when-compile
-<<<<<<< HEAD
   (require 'consult)
   (require 'url)
   (when (featurep 'json)
@@ -24,24 +23,6 @@
   (when (featurep 'request)
     (require 'request))
   )
-||||||| parent of 2f8257f (add indicator)
-(require 'consult)
-(require 'url)
-(when (featurep 'json)
-  (require 'json))
-(when (featurep 'request)
-  (require 'request))
-)
-=======
-(require 'url)
-(when (featurep 'json)
-  (require 'json))
-(when (featurep 'request)
-  (require 'request))
-)
->>>>>>> 2f8257f (add indicator)
-
-(require 'consult)
 
 ;;; Group
 (defgroup consult-web nil
@@ -504,7 +485,6 @@ Ommits keys in IGNORE-KEYS."
     (when (re-search-forward "\\=[ \t\n]*HTTP/\\(?1:[0-9\\.]+\\) +\\(?2:[0-9]+\\)" url-http-end-of-headers t)
     `(:http-version ,(match-string 1) :code ,(string-to-number (match-string 2)))))))
 
-<<<<<<< HEAD
 (defun consult-web--url-response-body (response-data)
 "Extracts the response body from `url-retrieve'."
 (plist-get response-data :data))
@@ -514,19 +494,6 @@ Ommits keys in IGNORE-KEYS."
   (message "consult-web: url-retrieve got an error: %s" (consult-web--parse-http-response)))
 
 (cl-defun consult-web--url-retrieve-synchronously (url &rest settings &key params headers parser data (type "GET") error (encoding 'utf-8) timeout)
-||||||| parent of 2f8257f (add indicator)
-(cl-defun consult-web--url-retrieve-synchronously (url &rest settings &key params headers parser data type error encoding timeout)
-=======
-(defun consult-web--url-response-body (response-data)
-"Extracts the response body from `url-retrieve'."
-(plist-get response-data :data))
-
-(defun consult-web--url-retrieve-error-handler (_)
-  "Handles errors for consult-web-url-retrieve functions."
-  (message "consult-web: url-retrieve got an error: %s" (consult-web--parse-http-response)))
-
-(cl-defun consult-web--url-retrieve-synchronously (url &rest settings &key params headers parser data (type "GET") error (encoding 'utf-8) timeout)
->>>>>>> 2f8257f (add indicator)
 "Retrieves URL synchronously.
 
 Passes all the arguments to url-retriev and fetches the results.
@@ -707,7 +674,6 @@ Refer to `request' documents for details."
 
       candidates))
 
-<<<<<<< HEAD
 (cl-defun consult-web--plz-error-handler (plz-error &rest args)
   "Handles errors for plz backend."
   (message "consult-web: <plz> %s" plz-error))
@@ -765,66 +731,6 @@ TIMEOUT is the time in seconds for timing out the request
                                         (funcall callback data)))
                                      ))))
 
-||||||| parent of 2f8257f (add indicator)
-=======
-(cl-defun consult-web--plz-error-handler (plz-error &rest args)
-  "Handles errors for plz backend."
-  (message "consult-web: <plz> %s" plz-error))
-
-(defun consult-web--default-url-parse-buffer ()
-""
-(goto-char (point-min))
-(json-parse-buffer :object-type 'hash-table :array-type 'list :false-object :false :null-object :null))
-
-(cl-defun consult-web--fetch-url-async (url backend &rest args &key type params headers data parser callback error encoding timeout &allow-other-keys)
-"Retrieves URL synchronously.
-
-Passes all the arguments to `consult-web--url-retrieve-synchronously' and in trun to `url-retrieve' fetches the results.
-
-TYPE is the http request type (e.g. “GET”, “POST”)
-PARAMS are parameters added to the base url using `consult-web--make-url-string'.
-HEADERS are headers passed to headers (e.g. `url-request-extra-headers').
-DATA are http request data passed to data (e.g. `url-request-data').
-PARSER is a function that is executed in the url-retrieve
-response buffer and the results are returned s the output of this function.
-CALLBACK is the function that is execute when the request is complete.
-ERROR is a function that handles errors
-ENCODING is the encoding used for the request (e.g. 'utf-8)
-TIMEOUT is the time in seconds for timing out the request
-"
-    (cond
-     ((eq backend 'plz)
-      (funcall #'plz (or type 'get) (consult-web--make-url-string url params)
-               :headers headers
-               :as parser
-               :then callback
-               :else (or error #'consult-web--plz-error-handler)
-               :timeout (or timeout consult-web-default-timeout)))
-     ((eq backend 'url)
-      (funcall #'consult-web-url-retrieve-async url
-               :type (or type "GET")
-               :params params
-               :headers headers
-               :parser parser
-               :data data
-               :error (or error #'consult-web--url-retrieve-error-handler)
-               :callback callback
-               :encoding encoding
-               :timeout (or timeout consult-web-default-timeout)))
-     ((eq backend 'request)
-      (funcall #'request url
-               :params params
-               :headers headers
-               :parser parser
-               :data data
-               :error (or error #'consult-web--request-error-handler)
-               :encoding encoding
-               :timeout (or timeout consult-web-default-timeout)
-               :complete (cl-function (lambda (&key data &allow-other-keys)
-                                        (funcall callback data)))
-                                     ))))
-
->>>>>>> 2f8257f (add indicator)
 (defun consult-web-dynamic--split-thingatpt (thing &optional split-initial)
   "Return THING at point.
 If SPLIT-INITIAL is non-nil, use `consult--async-split-initial' to format the string."
@@ -925,26 +831,6 @@ For more info on annotation refer to `consult' manual, particularly 'consult--re
       (concat (if url (format "\s%s" url)) (if source (format "\t%s" source)) (if snippet (format "\s\s%s" snippet)) (if extra-args (format "\t%s" extra-args)))
     ))
 
-<<<<<<< HEAD
-;; (defun consult-web--group-function (group-by cand transform)
-;;   "Group candidates by GROUP-BY keyword.
-
-;; This is passed as GROUP to `consult--read' on candidates and is used to define the grouping for CAND. "
-;;   (let* ((group-by (or consult-web--override-group-by group-by consult-web-group-by))
-;;          (group-by (if (not (keywordp group-by)) (intern (concat ":" (format "%s" group-by))) group-by))
-;;          (name (or (if group-by (get-text-property 0 group-by cand) "N/A"))))
-;;     (cond
-;;      ((equal group-by :domain)
-;;       (when-let* ((url (get-text-property 0 :url cand))
-;;                   (urlobj (if url (url-generic-parse-url url) nil))
-;;                   (domain (if (url-p urlobj) (url-domain urlobj))))
-;;         (setq name domain))))
-;;   (if transform (substring cand) name)))
-
-(defun consult-web--group-function (sources cand transform)
-||||||| parent of 2f8257f (add indicator)
-(defun consult-web--group-function (group-by cand transform)
-=======
 ;; (defun consult-web--group-function (group-by cand transform)
 ;;   "Group candidates by GROUP-BY keyword.
 
@@ -961,32 +847,15 @@ For more info on annotation refer to `consult' manual, particularly 'consult--re
 ;;   (if transform (substring cand) name)))
 
 (defun consult-web--group-function (sources cand transform &optional group-by)
->>>>>>> 2f8257f (add indicator)
   "Group candidates by GROUP-BY keyword.
 
 This is passed as GROUP to `consult--read' on candidates and is used to define the grouping for CAND. "
-<<<<<<< HEAD
   (if transform (substring cand)
-    (let* ((group-by (or consult-web--override-group-by consult-web-group-by))
+    (let* ((group-by (or consult-web--override-group-by group-by consult-web-group-by))
            (group-by (if (not (keywordp group-by)) (intern (concat ":" (format "%s" group-by))) group-by)))
       (cond
        ((equal group-by :domain)
         (if-let* ((url (get-text-property 0 :url cand))
-||||||| parent of 2f8257f (add indicator)
-  (let* ((group-by (or consult-web--override-group-by group-by consult-web-group-by))
-         (group-by (if (not (keywordp group-by)) (intern (concat ":" (format "%s" group-by))) group-by))
-         (name (or (if group-by (get-text-property 0 group-by cand) "N/A"))))
-    (cond
-     ((equal group-by :domain)
-      (when-let* ((url (get-text-property 0 :url cand))
-=======
-  (if transform (substring cand)
-    (let* ((group-by (or group-by consult-web--override-group-by consult-web-group-by))
-           (group-by (if (not (keywordp group-by)) (intern (concat ":" (format "%s" group-by))) group-by)))
-      (cond
-       ((equal group-by :domain)
-        (if-let* ((url (get-text-property 0 :url cand))
->>>>>>> 2f8257f (add indicator)
                   (urlobj (if url (url-generic-parse-url url) nil))
                   (domain (if (url-p urlobj) (url-domain urlobj))))
             domain
@@ -1229,7 +1098,6 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
                    )
 )
 
-<<<<<<< HEAD
 (defun consult-web--split-command (input &rest args)
   (pcase-let* ((`(,query . ,opts) (consult--command-split input))
                (remaining-opts (list))
@@ -1332,8 +1200,177 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
                (not (or consult--narrow (plist-get src :hidden)))))))
 
 (defun consult-web--match-minibuffer-content-p (cand)
-  (with-current-buffer (window-buffer (active-minibuffer-window))
-    (string-match  (concat ".*" (minibuffer-contents-no-properties) ".*") (substring-no-properties cand))))
+  (let* ((win (active-minibuffer-window))
+        (buffer (window-buffer win))
+        (split-char (plist-get (consult--async-split-style) :initial)))
+  (with-current-buffer buffer
+    (if (minibuffer-window-active-p win)
+        (string-match (concat ".*" (string-trim (car-safe (consult-web--split-command (minibuffer-contents-no-properties))) split-char "\n") ".*") (substring-no-properties cand))))))
+
+(defun consult-web--multi-propertize (response-items category pos &optional face)
+  "Propertize RESPONSE-ITEMS with the multi-category datum and FACE.
+
+POS and CATEGORY are the group ID and category for these items."
+  (let ((annotated-items))
+    (dolist (item response-items annotated-items)
+      (let ((cand (consult--tofu-append item pos)))
+        ;; Preserve existing `multi-category' datum of the candidate.
+        (if (get-text-property 0 'multi-category cand)
+            (when face (add-text-properties 0 (length item) face cand))
+          ;; Attach `multi-category' datum and face.
+          (add-text-properties 0 (length item)
+                               `(multi-category (,category . ,item) ,@face) cand))
+        (push cand annotated-items)))))
+
+(defun consult-web--multi-annotate (sources cand)
+  (let ((src (consult--multi-source sources cand)))
+    (if-let ((fun (plist-get src :annotate)))
+        (cond
+         ((functionp fun)
+          (funcall fun (cdr (get-text-property 0 'multi-category cand))))
+         ((and (symbolp fun) (functionp (eval fun)))
+          (funcall (eval fun) (cdr (get-text-property 0 'multi-category cand)))))
+      )))
+
+(defun cosnult-web--multi-dynamic-candidates-update (async sources candidates input)
+    (let ((idx 0))
+      (seq-doseq (src sources)
+        (let* ((face (and (plist-member src :face) `(face ,(plist-get src :face))))
+               (cat (plist-get src :category))
+               (items (plist-get src :items))
+               (narrow (plist-get src :narrow))
+               (type (or (car-safe narrow) narrow -1))
+               (pos idx))
+          (when (or (eq consult--narrow type)
+                    (not (or consult--narrow (plist-get src :hidden))))
+            (condition-case nil
+                (progn
+                  (when (functionp items)
+                    (cond
+                     ((< (cdr (func-arity items)) 1)
+                      (setq items (funcall items))
+                      (aset candidates idx    ; sync source, refresh now
+                            (and items (consult-web--multi-propertize
+                                        items cat idx face)))
+                      (funcall async 'flush)
+                      (funcall async (apply #'append (append candidates nil)))
+                      )
+                     ((< (cdr (func-arity items)) 2)
+                      (setq items (funcall items input))
+                      (aset candidates idx    ; sync source, refresh now
+                            (and items (consult-web--multi-propertize
+                                        items cat idx face)))
+                      (funcall async 'flush)
+                      (funcall async (apply #'append (append candidates nil)))
+                      )
+                     ((< (cdr (func-arity items)) 3)
+                      (if input (funcall items input      ; async source, refresh in callback
+                               (lambda (response-items)
+                                 (when response-items
+                                   (aset candidates pos
+                                         (consult-web--multi-propertize response-items cat pos face))
+                                   (funcall async 'flush)
+                                   (funcall async (apply #'append (append candidates nil)))
+                                   ))))))
+                    ))
+              (t
+               (message "calling :items in %s source produced error" src)
+               nil)
+              )))
+        (cl-incf idx))
+      candidates)
+  )
+
+(defun consult-web--multi-dynamic-compute (async sources &optional debounce)
+  "Dynamic computation of candidates.
+ASYNC is the sink.
+FUN computes the candidates given the input.
+DEBOUNCE is the time after which an interrupted computation
+should be restarted."
+  (setq debounce (or debounce consult-async-input-debounce))
+  (setq async (consult--async-indicator async))
+  (let* ((request) (current) (timer)
+         (candidates (make-vector (length sources) nil))
+         (cancel (lambda () (when timer (cancel-timer timer) (setq timer nil))))
+         (start (lambda (req) (setq request req) (funcall async 'refresh)))
+         (fun (apply-partially #'cosnult-web--multi-dynamic-candidates-update async sources))
+         )
+    (lambda (action)
+      (pcase action
+        ((and 'nil (guard (not request)))
+         (funcall async nil))
+        ('nil
+         (funcall cancel)
+         (let ((state 'killed))
+           (unwind-protect
+               (progn
+                 (funcall async 'indicator 'running)
+                 (redisplay)
+                 ;; Run computation
+                 (let* ((response (funcall fun candidates request)))
+                   ;; Flush and update candidate list
+                       (setq candidates response)
+                       (if (or (equal response 'nil) (equal response [nil]))
+                           (funcall async 'flush)
+                         (funcall async 'nil))
+                       (setq state 'finished
+                         current request)
+                     ))
+             (funcall async 'indicator state)
+             ;; If the computation was killed, restart it after some time.
+             (when (eq state 'killed)
+               (setq timer (run-at-time debounce nil start request)))
+             (setq request nil))))
+        ((pred stringp)
+         (funcall cancel)
+         (if (or (equal action "") (equal action current))
+               (funcall async 'indicator 'finished)
+           (funcall start action)))
+        ('destroy
+         (funcall cancel)
+         (funcall async 'destroy))
+        (_ (funcall async action))))))
+
+(defun consult-web--async-sink ()
+  "Create ASYNC sink function.
+
+An async function must accept a single action argument.  For the
+\\='setup action it is guaranteed that the call originates from
+the minibuffer.  For the other actions no assumption about the
+context can be made.
+
+\\='setup   Setup the internal closure state.  Return nil.
+\\='destroy Destroy the internal closure state.  Return nil.
+\\='flush   Flush the list of candidates.  Return nil.
+\\='refresh Request UI refresh.  Return nil.
+nil      Return the list of candidates.
+list     Append the list to the already existing candidates list and return it.
+string   Update with the current user input string.  Return nil."
+  (let (candidates last buffer)
+    (lambda (action)
+      (pcase-exhaustive action
+        ('setup
+         (setq buffer (current-buffer))
+         nil)
+        ((or (pred stringp) 'destroy) nil)
+        ('flush (setq candidates nil last nil))
+        ('refresh
+         ;; Refresh the UI when the current minibuffer window belongs
+         ;; to the current asynchronous completion session.
+         (when-let (win (active-minibuffer-window))
+           (when (eq (window-buffer win) buffer)
+             (with-selected-window win
+               (run-hooks 'consult--completion-refresh-hook)
+               ;; Interaction between asynchronous completion functions and
+               ;; preview: We have to trigger preview immediately when
+               ;; candidates arrive (gh:minad/consult#436).
+               (when (and consult--preview-function candidates)
+                 (funcall consult--preview-function)))))
+         nil)
+        ('nil candidates)
+        ((pred consp)
+         (setq last (last (if last (setcdr last action) (setq candidates action))))
+         candidates)))))
 
 (defun consult-web--multi-async (async sources)
   "Merge the results of (a)sync SOURCES and pass it to function ASYNC."
@@ -1385,40 +1422,15 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
                (cl-incf idx)))))
         (_ (funcall async action))))))
 
-(defun consult-web--multi-propertize (response-items category pos &optional face)
-  "Propertize RESPONSE-ITEMS with the multi-category datum and FACE.
-
-POS and CATEGORY are the group ID and category for these items."
-  (let ((annotated-items))
-    (dolist (item response-items annotated-items)
-      (let ((cand (consult--tofu-append item pos)))
-        ;; Preserve existing `multi-category' datum of the candidate.
-        (if (get-text-property 0 'multi-category cand)
-            (when face (add-text-properties 0 (length item) face cand))
-          ;; Attach `multi-category' datum and face.
-          (add-text-properties 0 (length item)
-                               `(multi-category (,category . ,item) ,@face) cand))
-        (push cand annotated-items)))))
-
-(defun consult-web--multi-annotate (sources cand)
-  (let ((src (consult--multi-source sources cand)))
-    (if-let ((fun (plist-get src :annotate)))
-        (cond
-         ((functionp fun)
-          (funcall fun (cdr (get-text-property 0 'multi-category cand))))
-         ((and (symbolp fun) (functionp (eval fun)))
-          (funcall (eval fun) (cdr (get-text-property 0 'multi-category cand)))))
-      )))
-
 (defun consult-web--multi-dynamic (sources &rest options)
   (let* ((sources (consult--multi-enabled-sources sources))
          (selected
           (apply #'consult--read
                  (consult--async-split
                   (consult--async-throttle
-                   (consult-web--multi-async
+                   (consult-web--multi-dynamic-compute
                     (consult--async-refresh-timer
-                     (consult--async-sink))
+                    (consult--async-sink))
                     sources)))
                  (append
                   options
@@ -1443,152 +1455,6 @@ POS and CATEGORY are the group ID and category for these items."
       (setq selected `(,(car selected) :match t ,@(cdr selected))))
     selected))
 
-||||||| parent of 2f8257f (add indicator)
-=======
-(defun consult-web--split-command (input &rest args)
-  (pcase-let* ((`(,query . ,opts) (consult--command-split input))
-               (remaining-opts (list))
-               (args (or args (list)))
-               )
-    (if opts
-        (progn
-      (cl-loop for opt in opts
-               do
-               (pcase-let* ((`(,key . ,val) (consult-web--extract-opt-pair opt opts (list "--group" ":group"))))
-                 (when key
-                   (setq args (append args (list key val)))
-                   (setq remaining-opts (cl-delete-duplicates (append remaining-opts (list opt (format "%s" val))))))
-                 ))
-
-      (setq opts (seq-difference opts remaining-opts))
-
-      (when (member "-n" opts)
-        (setq args (append args `(:count ,(cadr (member "-n" opts))))))
-
-      (when (member "-p" opts)
-        (setq args (append args `(:page ,(cadr (member "-p" opts))))))
-
-      (if (or (member "-g" opts) (member ":group" opts) (member "--group" opts))
-          (cond
-           ((member "-g" opts)
-            (setq consult-web--override-group-by (cadr (member "-g" opts))))
-           ((member "--group" opts)
-            (setq consult-web--override-group-by (cadr (member "--group" opts))))
-           ((member ":group" opts)
-            (setq consult-web--override-group-by (cadr (member ":group" opts)))))
-        (setq consult-web--override-group-by nil)
-        ))
-      (setq consult-web--override-group-by nil))
-    (list (or query input) args)
-    ))
-
-(defun consult-web--multi-group (sources cand transform)
-  "Return title of candidate CAND or TRANSFORM the candidate given SOURCES."
-  (if transform cand
-    (let* ((fun (and (plist-member (consult--multi-source sources cand) :group)
-                     (plist-get (consult--multi-source sources cand) :group))))
-      (cond
-       ((functionp fun)
-        (funcall fun sources cand transform))
-       ((stringp fun)
-        fun)
-       ((eq fun 'nil)
-        nil)
-       (t
-        (plist-get (consult--multi-source sources cand) :name))))))
-
-(defun consult-web--multi-async (async sources)
-  "Merge the results of (a)sync SOURCES and pass it to function ASYNC."
-  (let ((candidates (make-vector (length sources) nil)))
-    (lambda (action)
-      (pcase action
-        ((pred stringp)
-         (unless (equal action "")
-           (let ((idx 0))
-             (seq-doseq (src sources)
-               (let* ((face (and (plist-member src :face) `(face ,(plist-get src :face))))
-                      (cat (plist-get src :category))
-                      (items (plist-get src :items))
-                      (narrow (plist-get src :narrow))
-                      (type (or (car-safe narrow) narrow -1))
-                      (pos idx))
-                 (when (or (eq consult--narrow type)
-                           (not (or consult--narrow (plist-get src :hidden))))
-                   (condition-case nil
-                       (progn
-                         (when (functionp items) (setq items (funcall items action)))
-                         (aset candidates idx    ; sync source, refresh now
-                               (and items (consult-web--multi-propertize
-                                           items cat idx face)))
-                         (funcall async 'flush)
-                         (funcall async (apply #'append (append candidates nil))))
-                     (wrong-number-of-arguments
-                      (funcall items action      ; async source, refresh in callback
-                               (lambda (response-items)
-                                 (when response-items
-                                   (aset candidates pos
-                                         (consult-web--multi-propertize response-items cat pos face))
-                                   (funcall async 'flush)
-                                   (funcall async (apply #'append (append candidates nil))))))))))
-               (cl-incf idx)))))
-        (_ (funcall async action))))))
-
-(defun consult-web--multi-propertize (response-items category pos &optional face)
-  "Propertize RESPONSE-ITEMS with the multi-category datum and FACE.
-
-POS and CATEGORY are the group ID and category for these items."
-  (let ((annotated-items))
-    (dolist (item response-items annotated-items)
-      (let ((cand (consult--tofu-append item pos)))
-        ;; Preserve existing `multi-category' datum of the candidate.
-        (if (get-text-property 0 'multi-category cand)
-            (when face (add-text-properties 0 (length item) face cand))
-          ;; Attach `multi-category' datum and face.
-          (add-text-properties 0 (length item)
-                               `(multi-category (,category . ,item) ,@face) cand))
-        (push cand annotated-items)))))
-
-(defun consult-web--multi-annotate (sources cand)
-  (let ((src (consult--multi-source sources cand)))
-    (if-let ((fun (plist-get src :annotate)))
-        (funcall fun (cdr (get-text-property 0 'multi-category cand)))
-      (plist-get src :name)
-      )))
-
-(defun consult-web--multi-dynamic (sources &rest options)
-  (let* ((sources (consult--multi-enabled-sources sources))
-         (selected
-          (apply #'consult--read
-                 (consult--async-split
-                  (consult--async-throttle
-                   (consult-web--multi-async
-                    (consult--async-refresh-timer
-                     (consult--async-sink))
-                    sources)))
-                 (append
-                  options
-                  (list
-                   :sort        t
-                   :history     'consult-web--search-history
-                   :initial     (consult--async-split-initial nil)
-                   :category    'multi-category
-                   :predicate   (apply-partially #'consult--multi-predicate sources)
-                   :annotate    (apply-partially #'consult-web--multi-annotate sources)
-                   :group       (apply-partially #'consult-web--multi-group sources)
-                   :lookup      (apply-partially #'consult--multi-lookup sources)
-                   :preview-key (consult--multi-preview-key sources)
-                   :narrow      (consult--multi-narrow sources)
-                   :state       (consult--multi-state sources))))))
-    (if (plist-member (cdr selected) :match)
-        (when-let (fun (plist-get (cdr selected) :new))
-          (funcall fun (car selected))
-          (plist-put (cdr selected) :match 'new))
-      (when-let (fun (plist-get (cdr selected) :action))
-        (funcall fun (car selected)))
-      (setq selected `(,(car selected) :match t ,@(cdr selected))))
-    selected))
-
->>>>>>> 2f8257f (add indicator)
 (defun consult-web--source-name (source-name &optional suffix)
   "Returns a symbol for SOURCE-NAME variable.
 
@@ -1617,13 +1483,7 @@ This is used to make docstring for function made by `consult-web-define-source'.
   (concat "consult-web's " (if dynamic "dynamic ") (format "interactive command to search %s."
                                                              (capitalize source-name))))
 
-<<<<<<< HEAD
 (defun consult-web--make-source-list (source-name request format annotate face narrow-char state preview-key category lookup group sort enabled selection-history)
-||||||| parent of 2f8257f (add indicator)
-(defun consult-web--make-source-list (source-name request format annotate face narrow-char state preview-key category lookup selection-history input args)
-=======
-(defun consult-web--make-source-list (source-name request format annotate face narrow-char state preview-key category lookup sort enabled selection-history)
->>>>>>> 2f8257f (add indicator)
   "Internal function to make a source for `consult--multi'.
 
 Do not use this function directly, use `consult-web-define-source' macro
@@ -1642,15 +1502,7 @@ instead."
                                     (cl-remove-duplicates
                                      (append (mapcar (lambda (thing) (consult-web-dynamic--split-thingatpt thing))
                                              (list 'number 'word 'sexp 'symbol 'url 'filename 'sentence 'line)) (list isearch-string))))
-<<<<<<< HEAD
           :items  ,request
-||||||| parent of 2f8257f (add indicator)
-          :items ,(funcall #'consult-web--format-candidates-list  (funcall request input args) format)
-
-=======
-          :items  ,request
-
->>>>>>> 2f8257f (add indicator)
           :annotate ,(cond
                       ((and annotate (functionp annotate))
                        annotate)
@@ -1662,19 +1514,9 @@ instead."
                     (consult-web--lookup-function))
           :group ,(or group #'consult-web--group-function)
           :preview-key ,(and consult-web-show-preview (or preview-key consult-web-preview-key))
-<<<<<<< HEAD
           :enabled ,(or enabled t)
           :sort ,sort
           ))
-||||||| parent of 2f8257f (add indicator)
-          :sort t
-          )
-  )
-=======
-          :enabled (if enabled ,enabled t)
-          :sort ,sort
-          ))
->>>>>>> 2f8257f (add indicator)
 
 (defun consult-web--call-static-command (input no-callback args request format face state source-name category lookup selection-history-var annotate preview-key on-callback sort)
   "Internal function to make static `consult--read' command.
@@ -1684,7 +1526,6 @@ instead."
   (let* ((input (or input
                     (and consult-web-default-autosuggest-command (funcall-interactively consult-web-default-autosuggest-command))
                     (consult-web--read-search-string)))
-<<<<<<< HEAD
          (consult-async-input-throttle consult-web-dynamic-input-throttle)
          (consult-async-input-debounce consult-web-dynamic-input-debounce)
          (consult-async-refresh-delay consult-web-dynamic-refresh-delay)
@@ -1694,65 +1535,6 @@ instead."
          (selected (cond
                     ((consp selected) (car selected))
                     (t selected)))
-||||||| parent of 2f8257f (add indicator)
-         (selected
-          (consult--read (funcall #'consult-web--format-candidates-list (funcall  request input args) format face)
-                         :state (or state (consult-web--dynamic-state-function))
-                         :require-match nil
-                         :prompt (concat "[" (propertize (format "%s" (consult-web--func-name source-name)) 'face 'consult-web-prompt-face) "]" " Search:  ")
-                         :sort t
-                         :history (cond
-                                   ((eq selection-history-var nil)
-                                    nil)
-                                   ((eq selection-history-var t)
-                                    t)
-                                   ((symbolp selection-history-var)
-                                    selection-history-var))
-                         :add-history (delq nil
-                                            (cl-remove-duplicates
-                                             (append (mapcar (lambda (thing) (consult-web-dynamic--split-thingatpt thing))
-                                                             (list 'number 'word 'sexp 'symbol 'url 'filename 'sentence 'line)) (list isearch-string))))
-                         :group (if (functionp consult-web-group-by) consult-web-group-by (apply-partially #'consult-web--group-function consult-web-group-by))
-                         :category (or category 'consult-web)
-                         :lookup (if (and lookup (functionp lookup))
-                                     lookup
-                                   (consult-web--lookup-function))
-                         :annotate (cond
-                                    ((and annotate (functionp annotate)) annotate)
-                                    ((eq annotate t) #'consult-web--annotate-function)
-                                    (t nil))
-                         :preview-key (and consult-web-show-preview (or preview-key consult-web-preview-key))
-                         ))
-=======
-         (selected
-          (consult--read (funcall #'consult-web--format-candidates-list (funcall  request input args) format face)
-                         :state (or state (consult-web--dynamic-state-function))
-                         :require-match nil
-                         :prompt (concat "[" (propertize (format "%s" (consult-web--func-name source-name)) 'face 'consult-web-prompt-face) "]" " Search:  ")
-                         :sort sort
-                         :history (cond
-                                   ((eq selection-history-var nil)
-                                    nil)
-                                   ((eq selection-history-var t)
-                                    t)
-                                   ((symbolp selection-history-var)
-                                    selection-history-var))
-                         :add-history (delq nil
-                                            (cl-remove-duplicates
-                                             (append (mapcar (lambda (thing) (consult-web-dynamic--split-thingatpt thing))
-                                                             (list 'number 'word 'sexp 'symbol 'url 'filename 'sentence 'line)) (list isearch-string))))
-                         :group (if (functionp consult-web-group-by) consult-web-group-by (apply-partially #'consult-web--group-function consult-web-group-by))
-                         :category (or category 'consult-web)
-                         :lookup (if (and lookup (functionp lookup))
-                                     lookup
-                                   (consult-web--lookup-function))
-                         :annotate (cond
-                                    ((and annotate (functionp annotate)) annotate)
-                                    ((eq annotate t) #'consult-web--annotate-function)
-                                    (t nil))
-                         :preview-key (and consult-web-show-preview (or preview-key consult-web-preview-key))
-                         ))
->>>>>>> 2f8257f (add indicator)
          (source (get-text-property 0 :source selected))
          )
     (unless no-callback
@@ -1773,32 +1555,11 @@ Do not use this function directly, use `consult-web-define-source' macro
          (selected (consult-web--multi-dynamic (list (consult-web--source-name source-name))
                                       :prompt prompt
                                       :history '(:input search-history-var)
-                                      :initial initial
+                                      :initial (consult--async-split-initial initial)
                                       ))
          (selected (cond
                     ((consp selected) (car selected))
                     (t selected)))
-         (source (get-text-property 0 :source selected))
-         (title (get-text-property 0 :title selected)))
-    (add-to-history selection-history-var title)
-    (unless no-callback
-      (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-callback) selected)
-      )
-    selected
-    ))
-
-(defun consult-web--call-dynamic-command (initial no-callback args source-name request category face lookup search-history-var selection-history-var preview-key)
-  "Internal function to make dynamic `consult--read' command.
-
-Do not use this function directly, use `consult-web-define-source' macro
- instead."
-  (let* ((consult-async-refresh-delay consult-web-dynamic-refresh-delay)
-         (consult-async-input-throttle consult-web-dynamic-input-throttle)
-         (consult-async-input-debounce consult-web-dynamic-input-debounce)
-         (prompt (concat "[" (propertize (format "%s" (consult-web--func-name source-name "dynamic-")) 'face 'consult-web-prompt-face) "]" " Search:  "))
-         (selected (consult-web--multi-dynamic (list request)
-                                                :prompt prompt
-                                                ))
          (source (get-text-property 0 :source selected))
          (title (get-text-property 0 :title selected)))
     (add-to-history selection-history-var title)
@@ -1928,26 +1689,13 @@ variable that this macro creates for %s=SOURCE-NAME.
 
   `(progn
 
-<<<<<<< HEAD
      ;; make a variable called consult-web--source-%s (%s=source-name)
      (defvar ,(consult-web--source-name source-name) (consult-web--make-source-list ,source-name ,request ,format ,annotate ,face ,narrow-char ,state ,preview-key ,category ,lookup ,group ,sort ,enabled ,selection-history))
 
-||||||| parent of 2f8257f (add indicator)
-=======
-     ;; make a variable called consult-web--source-%s (%s=source-name)
-     (defvar ,(consult-web--source-name source-name) t)
-
->>>>>>> 2f8257f (add indicator)
      ;; make a function that creates a consult--read source for consult-web-multi
      (defun ,(consult-web--source-name source-name "-list") (input &rest args)
        ,(or docstring (consult-web--source-generate-docstring source-name))
-<<<<<<< HEAD
        (consult-web--make-source-list ,source-name ,request ,format ,annotate ,face ,narrow-char ,state ,preview-key ,category ,lookup ,group ,sort ,enabled ,selection-history)
-||||||| parent of 2f8257f (add indicator)
-       (consult-web--make-source-list ,source-name ,request ,format ,annotate ,face ,narrow-char ,state ,preview-key ,category ,lookup ,selection-history input args)
-=======
-       (consult-web--make-source-list ,source-name ,request ,format ,annotate ,face ,narrow-char ,state ,preview-key ,category ,lookup ,sort ,enabled ,selection-history)
->>>>>>> 2f8257f (add indicator)
        )
 
      ;; make a static interactive command consult-web-%s (%s=source-name)
