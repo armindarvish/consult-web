@@ -1,3 +1,10 @@
+
+* consult-web
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./consult-web.el
+:END:
+** Header
+#+begin_src emacs-lisp
 ;;; consult-web.el --- Consulting Web Search Engines -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2024 Armin Darvish
@@ -14,6 +21,10 @@
 
 ;;; Code:
 
+#+end_src
+
+** Requirements
+#+begin_src emacs-lisp
 ;;; Requirements
 (eval-when-compile
   (require 'consult)
@@ -23,7 +34,12 @@
   (when (featurep 'request)
     (require 'request))
   )
+#+end_src
 
+
+** Define Group, Customs, Vars, Etc.
+*** group
+#+begin_src emacs-lisp
 ;;; Group
 (defgroup consult-web nil
   "Consulting search engines and AI assistants"
@@ -33,7 +49,10 @@
   :group 'web
   :group 'search
   :prefix "consult-web-")
+#+end_src
 
+*** customization variables
+#+begin_src emacs-lisp
 ;;; Customization Variables
 (defcustom consult-web-sources-modules-to-load  (list)
   "List of source modules/features to load.
@@ -232,6 +251,11 @@ for consult-web dynamic commands.
 By default inherits from `consult-async-refresh-delay'. "
   :type '(float :tag "delay in seconds"))
 
+
+#+end_src
+
+*** other variables
+#+begin_src emacs-lisp
 ;;; Other Variables
 
 (defvar consult-web-sources--all-modules-list (list)
@@ -273,6 +297,10 @@ This is used for defining narrow functions
 (e.g. `consult-web--dynamic-narrow-function'."
 )
 
+#+end_src
+
+*** define faces
+#+begin_src emacs-lisp
 ;;; Faces
 
 (defface consult-web-default-face
@@ -322,7 +350,13 @@ This is used for defining narrow functions
 (defface consult-web-preview-match-face
   `((t :inherit 'consult-preview-match))
   "Preview match face in `consult-web' preview buffers.")
-
+#+end_src
+** Define Backend Functions
+*** general utility
+**** formatting strings
+***** fix string length
+****** set string width
+#+begin_src emacs-lisp
 ;;; Bakcend Functions
 
 (defun consult-web--set-string-width (string width &optional prepend)
@@ -344,6 +378,9 @@ If PREPEND is non-nil, it truncates or adds whitespace from
           (setq string (format "...%s" (substring string (- w (- width 3)) w)))
         (setq string (format "%s..." (substring string 0 (- width (+ w 3)))))))
     string))
+#+end_src
+****** justify left
+#+begin_src emacs-lisp
 
 (defun consult-web--justify-left (string prefix maxwidth)
   "Sets the width of STRING+PREFIX justified from left.
@@ -358,6 +395,10 @@ This is used for aligning marginalia info in minibuffer."
     string
           )
     ))
+
+#+end_src
+***** highlight match with text-properties
+#+begin_src emacs-lisp
 
 (defun consult-web--highlight-match (regexp str ignore-case)
   "Highlights REGEXP in STR.
@@ -381,6 +422,9 @@ Case is ignored, if ignore-case is non-nil.
             )
           (setq m (cddr m))))))
   str)
+#+end_src
+***** highlight match with overlay
+#+begin_src emacs-lisp
 
 (defun consult-web--overlay-match (match-str buffer ignore-case)
   "Highlights MATCH-STR in BUFFER using an overlay.
@@ -415,6 +459,11 @@ if needed in formating candidates or preview buffers."
          (overlay-put o 'face 'consult-web-highlight-match-face))
       )
 ))))
+#+end_src
+
+
+**** make url with params
+#+begin_src emacs-lisp
 
 (defun consult-web--make-url-string (url params &optional ignore-keys)
 "Adds key value pairs in PARAMS to URL as “&key=val”.
@@ -430,6 +479,9 @@ Does not add keys for the key in IGNORE-KEYS list."
                                            (unless (member key ignore-keys)
                                              (format "&%s=%s" key value))))))
   (mapconcat #'identity list)))
+#+end_src
+**** properties to plist
+#+begin_src emacs-lisp
 
 (defun consult-web-properties-to-plist (string &optional ignore-keys)
 "Returns a plist of the text properties of STRING.
@@ -441,10 +493,16 @@ Ommits keys in IGNORE-KEYs."
            when (keywordp k)
            collect (unless (member k ignore-keys) (push (list k (plist-get properties k)) pl)))
   (apply #'append pl)))
-
+#+end_src
+**** propertize with plist
+#+begin_src emacs-lisp
 (defun consult-web-propertize-by-plist (item props)
 "Propertizes ITEM by PROPS plist"
   (apply #'propertize item props))
+#+end_src
+
+**** hashtable-to-plist
+#+begin_src emacs-lisp
 
 (defun consult-web-hashtable-to-plist (hashtable &optional ignore-keys)
 "Converts a HASHTABLE to a plist.
@@ -458,13 +516,22 @@ Ommits keys in IGNORE-KEYS."
          (push (list k v) pl)))
      hashtable)
     (apply #'append pl)))
+#+end_src
+
+**** expand function in variable
+#+begin_src emacs-lisp
 
 (defun consult-web-expand-variable-function (var)
 "Call the function if VAR is a function"
   (if (functionp var)
                  (funcall var)
     var))
-
+#+end_src
+**** http requests
+***** backends
+****** url retrieve  backend
+******* log
+#+begin_src emacs-lisp
 (defun consult-web--log (string)
   "Logs the response from `consult-web-url-retrieve-sync' in `consult-web-log-buffer-name'."
    (with-current-buffer (get-buffer-create consult-web-log-buffer-name)
@@ -476,7 +543,9 @@ Ommits keys in IGNORE-KEYS."
      (insert "\n")
      (goto-char (point-min))
      (insert "\n\n**********************************************\n")))
-
+#+end_src
+******* parse http response
+#+begin_src emacs-lisp
 (defun consult-web--parse-http-response (&optional buffer)
   "Parse the first header line such as \"HTTP/1.1 200 OK\"."
 (with-current-buffer (or buffer (current-buffer))
@@ -484,15 +553,22 @@ Ommits keys in IGNORE-KEYS."
     (goto-char (point-min))
     (when (re-search-forward "\\=[ \t\n]*HTTP/\\(?1:[0-9\\.]+\\) +\\(?2:[0-9]+\\)" url-http-end-of-headers t)
     `(:http-version ,(match-string 1) :code ,(string-to-number (match-string 2)))))))
-
+#+end_src
+******* get the response data
+#+begin_src emacs-lisp
 (defun consult-web--url-response-body (response-data)
 "Extracts the response body from `url-retrieve'."
 (plist-get response-data :data))
+#+end_src
 
+******* error-handler
+#+begin_src emacs-lisp
 (defun consult-web--url-retrieve-error-handler (&rest args)
   "Handles errors for consult-web-url-retrieve functions."
   (message "consult-web: url-retrieve got an error: %s" (consult-web--parse-http-response)))
-
+#+end_src
+******* url retrieve synchronously
+#+begin_src emacs-lisp
 (cl-defun consult-web--url-retrieve-synchronously (url &rest settings &key params headers parser data (type "GET") error (encoding 'utf-8) timeout)
 "Retrieves URL synchronously.
 
@@ -555,7 +631,9 @@ PARSER is a function that is executed in the url-retrieve response buffer and th
           )))
     response-data
     ))
-
+#+end_src
+******* url retrieve sync
+#+begin_src emacs-lisp
 (cl-defun consult-web-url-retrieve-sync (url &key params headers parser data (type "GET") error (encoding 'utf-8) timeout)
 "Retrieves URL synchronously.
 
@@ -583,7 +661,9 @@ TIMEOUT is the time in seconds for timing out the request
                                               :error error
                                               :encoding encoding
                                               :timeout (or timeout consult-web-default-timeout))))
-
+#+end_src
+******* url retrieve async
+#+begin_src emacs-lisp
 (cl-defun consult-web-url-retrieve-async (url &rest settings &key params headers parser data (type "GET") callback error (encoding 'utf-8) timeout)
 "Retrieves URL synchronously.
 
@@ -646,10 +726,16 @@ TIMEOUT is the time in seconds for timing out the request.
             ))
         )
     )))
-
+#+end_src
+****** request backend
+******* error-handler
+#+begin_src emacs-lisp
 (cl-defun consult-web--request-error-handler (&rest args &key symbol-status error-thrown &allow-other-keys)
   "Handles errors for request backend."
   (message "consult-web: <request>  %s - %s" symbol-status error-thrown))
+#+end_src
+******* consult-web--request-sync
+#+begin_src emacs-lisp
 
   (cl-defun consult-web--request-sync (url &rest args &key params headers data parser placeholder error encoding &allow-other-keys)
     "Convinient wrapper for `request'.
@@ -673,16 +759,24 @@ Refer to `request' documents for details."
                                 (setq candidates data))))
 
       candidates))
-
+#+end_src
+****** plz
+******* error-handler
+#+begin_src emacs-lisp
 (cl-defun consult-web--plz-error-handler (plz-error &rest args)
   "Handles errors for plz backend."
   (message "consult-web: <plz> %s" plz-error))
-
+#+end_src
+***** universal
+****** parse buffer
+#+begin_src emacs-lisp
 (defun consult-web--default-url-parse-buffer ()
 ""
 (goto-char (or url-http-end-of-headers (point-min)))
 (json-parse-buffer :object-type 'hash-table :array-type 'list :false-object :false :null-object :null))
-
+#+end_src
+****** fetch url
+#+begin_src emacs-lisp
 (cl-defun consult-web--fetch-url-async (url backend &rest args &key type params headers data parser callback error encoding timeout &allow-other-keys)
 "Retrieves URL synchronously.
 
@@ -730,7 +824,10 @@ TIMEOUT is the time in seconds for timing out the request
                :complete (cl-function (lambda (&key data &allow-other-keys)
                                         (funcall callback data)))
                                      ))))
-
+#+end_src
+*** consult-web backend
+**** thing at point
+#+begin_src emacs-lisp
 (defun consult-web-dynamic--split-thingatpt (thing &optional split-initial)
   "Return THING at point.
 If SPLIT-INITIAL is non-nil, use `consult--async-split-initial' to format the string."
@@ -738,6 +835,11 @@ If SPLIT-INITIAL is non-nil, use `consult--async-split-initial' to format the st
     (if split-initial
         (consult--async-split-initial str)
       str)))
+
+#+end_src
+**** format a single candidate (a.k.a. a hashtable)
+***** simple (non-searchable)
+#+begin_src emacs-lisp
 
 (defun consult-web--table-to-formatted-candidate-simple (table &optional face &rest args)
 "Returns a formatted candidate for TABLE.
@@ -754,7 +856,10 @@ The value is all the (key value) pairs in the table as a plist.
                    )
               (apply #'propertize title-str pl)
 ))
+#+end_src
 
+***** with metadata (searchable)
+#+begin_src emacs-lisp
 (defun consult-web--table-to-formatted-candidate-searchable (table &optional face &rest args)
 "Formats a consult-web candidate.
 
@@ -789,7 +894,9 @@ all the key value pairs in the table.
          ((stringp match-str)
           (setq str (consult-web--highlight-match match-str str t)))))
     str))
-
+#+end_src
+**** format all candidates in a list  (a.k.a. a list of hashtables)
+#+begin_src emacs-lisp
 (defun consult-web--format-candidates-list (list &optional format-func face)
 "Format a LIST of candidates.
 
@@ -806,7 +913,10 @@ Returns a list of formatted candidates using either FORMAT-FUNC or otherwise use
                          'consult-web-default-face))
                   )
               (funcall format-func table face))) list))
+#+end_src
 
+**** annotate candidates
+#+begin_src emacs-lisp
 (defun consult-web--annotate-function (cand)
 "Annotates each candidate in the minibuffer.
 
@@ -830,7 +940,11 @@ For more info on annotation refer to `consult' manual, particularly 'consult--re
         (setq url (consult-web--set-string-width url (floor (* (frame-width) 0.4)))))
       (concat (if url (format "\s%s" url)) (if source (format "\t%s" source)) (if snippet (format "\s\s%s" snippet)) (if extra-args (format "\t%s" extra-args)))
     ))
+#+end_src
 
+**** group candidates based on a keyword
+
+#+begin_src emacs-lisp
 ;; (defun consult-web--group-function (group-by cand transform)
 ;;   "Group candidates by GROUP-BY keyword.
 
@@ -871,7 +985,12 @@ This is passed as GROUP to `consult--read' on candidates and is used to define t
             source
           nil)))
       )))
+#+end_src
 
+**** narrowing function (for multi-source commands)
+
+***** single-source narrow
+#+begin_src emacs-lisp
 (defun consult-web--narrow-function (source)
 "Make a narrowing (key . value) pair for the SOURCE string.
 
@@ -879,7 +998,9 @@ key is the first character, and value is the entire source STRING.
 For example when “wikipedia” is passed as a source, it returns (w . “wikipedia”)."
  `(,(string-to-char source) . ,source)
 )
-
+#+end_src
+***** dynamic multi source narrow
+#+begin_src emacs-lisp
 (defun consult-web--dynamic-narrow-function ()
   "Dynamically makes a list of (key . value) for all the sources in the current list of candidates using `consult-web--narrow-function'."
   (let* ((narrow-pred (lambda (cand)
@@ -890,7 +1011,9 @@ For example when “wikipedia” is passed as a source, it returns (w . “wikip
                               consult-web--current-sources)))
 `(:Predicate ,narrow-pred :keys ,narrow-keys)
 ))
-
+#+end_src
+**** lookup function
+#+begin_src emacs-lisp
 (defun consult-web--lookup-function ()
 "Lookup function for `consult-web' minibuffer candidates.
 
@@ -903,6 +1026,9 @@ This is passed as LOOKUP to `consult--read' on candidates and is used to format 
       (apply #'propertize (or title url "nil") (or (text-properties-at 0 info) (list)))
       )))
 
+#+end_src
+**** preview
+#+begin_src emacs-lisp
 (defun consult-web--default-url-preview (cand)
 "Default function to use for previewing CAND."
 (when-let* ((url (cond
@@ -916,6 +1042,11 @@ This is passed as LOOKUP to `consult--read' on candidates and is used to format 
                         )
                )
 )
+
+#+end_src
+**** state
+***** make state
+#+begin_src emacs-lisp
 
 (cl-defun consult-web--make-state-function (&rest args &key setup preview exit return &allow-other-keys)
 "Convinient wrapper for `consult-web' to make custom state functions.
@@ -937,6 +1068,9 @@ candidate. Refer to `consult--read' documentation for more details."
              )))
       )
 
+#+end_src
+***** dynamic state function
+#+begin_src emacs-lisp
 (defun consult-web--dynamic-state-function ()
   "State function for `consult-web' minibuffer candidates.
 
@@ -961,7 +1095,9 @@ The preview and retrun actions are retrieve from `consult-web-sources-alist'."
                  (print cand)
                  (if return (funcall return cand) cand)))
               ))))))
-
+#+end_src
+**** callback
+#+begin_src emacs-lisp
 (defun consult-web--default-callback (cand)
 "Default CALLBACK for CAND.
 
@@ -970,7 +1106,9 @@ When making consult-web sources, if a CALLBACK is not provided, this
 CALLBACK is used as a fall back."
   (if-let ((url (get-text-property 0 :url cand)))
       (funcall consult-web-default-browse-function url)))
-
+#+end_src
+**** read search string
+#+begin_src emacs-lisp
 (defun consult-web--read-search-string (&optional initial)
   (consult--read nil
                  :prompt "Search: "
@@ -982,7 +1120,10 @@ CALLBACK is used as a fall back."
                                      (append (mapcar (lambda (thing) (consult-web-dynamic--split-thingatpt thing nil))
                                              (list 'number 'word 'sexp 'symbol 'url 'filename 'sentence 'line)) (list isearch-string))))
                                         ))
-
+#+end_src
+**** dynamic collection
+***** get key value pair from opt
+#+begin_src emacs-lisp
 (defun consult-web--extract-opt-pair (opt opts ignore-opts)
   "Extracts a pair of (OPT . value) from a list OPTS.
 
@@ -1005,6 +1146,10 @@ from command-line options in alist of strings"
    (when (and key (not (member opt ignore-opts)))
    (cons key val))
 ))
+
+#+end_src
+***** split args to input and args
+#+begin_src emacs-lisp
 
 (defun consult-web--split-args (args)
   "Splits ARGS to remaining args and input
@@ -1047,7 +1192,9 @@ remaining args are turned into a plist"
         )
     (list (or arg input) args)
 ))
-
+#+end_src
+***** dynamically get list of candidates from  source(s)
+#+begin_src emacs-lisp
 (defun consult-web-dynamic--list-from-sources (sources &optional format-func face &rest args)
   "Builds ARGS from user input and collects candidates from all
 SOURCES."
@@ -1064,12 +1211,18 @@ SOURCES."
        (apply sources input args) format-func face))
      (t
       (error "%s is not a consult-web-source!")))))
+#+end_src
 
+***** dynamic collection of results from source(s)
+#+begin_src emacs-lisp
 (defun consult-web-dynamic--collection (sources &optional format-func face &rest args)
 "This is a wrapper using `consult--dynamic-collection' and
 `consult-web-dynamic--list-from-sources'."
 (consult--dynamic-collection (apply-partially #'consult-web-dynamic--list-from-sources sources format-func face args)))
+#+end_src
 
+***** internal read
+#+begin_src emacs-lisp
 (defun consult-web-dynamic--internal (prompt collection &optional initial category lookup history-var preview-key)
 "internal function to run `consult--read'.
 
@@ -1097,7 +1250,12 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
                    :sort t
                    )
 )
+#+end_src
 
+
+*** consult-web-multi-async
+**** split-command
+#+begin_src emacs-lisp
 (defun consult-web--split-command (input &rest args)
   (pcase-let* ((`(,query . ,opts) (consult--command-split input))
                (remaining-opts (list))
@@ -1134,7 +1292,9 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
       (setq consult-web--override-group-by nil))
     (list (or query input) args)
     ))
-
+#+end_src
+**** multi-lookup
+#+begin_src emacs-lisp
 (defun consult-web--multi-lookup (sources selected candidates _input narrow &rest _)
   "Lookup SELECTED in CANDIDATES given SOURCES, with potential NARROW."
   (if (or (string-blank-p selected)
@@ -1166,6 +1326,9 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
       ;; Non-existing Tofu'ed candidate submitted, e.g., via Embark
       `(,(substring selected 0 -1) :match nil ,@(consult--multi-source sources selected))))))
 
+#+end_src
+**** muli-group
+#+begin_src emacs-lisp
 (defun consult-web--multi-group (sources cand transform)
   "Return title of candidate CAND or TRANSFORM the candidate given SOURCES."
   (if transform cand
@@ -1180,7 +1343,10 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
         nil)
        (t
         (plist-get (consult--multi-source sources cand) :name))))))
-
+#+end_src
+**** multi-predicate
+***** multi-predicate
+#+begin_src emacs-lisp
 (defun consult-web--multi-predicate (sources cand)
   "Predicate function called for each candidate CAND given SOURCES."
   (let* ((src (consult--multi-source sources cand))
@@ -1198,7 +1364,9 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
       (and show
            (or (eq consult--narrow type)
                (not (or consult--narrow (plist-get src :hidden)))))))
-
+#+end_src
+***** filter by minibuffer content
+#+begin_src emacs-lisp
 (defun consult-web--match-minibuffer-content-p (cand)
   (let* ((win (active-minibuffer-window))
         (buffer (window-buffer win))
@@ -1206,6 +1374,10 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
   (with-current-buffer buffer
     (if (minibuffer-window-active-p win)
         (string-match (concat ".*" (string-trim (car-safe (consult-web--split-command (minibuffer-contents-no-properties))) split-char "\n") ".*") (substring-no-properties cand))))))
+#+end_src
+
+**** multi-propertize
+#+begin_src emacs-lisp
 
 (defun consult-web--multi-propertize (response-items category pos &optional face)
   "Propertize RESPONSE-ITEMS with the multi-category datum and FACE.
@@ -1222,6 +1394,10 @@ POS and CATEGORY are the group ID and category for these items."
                                `(multi-category (,category . ,item) ,@face) cand))
         (push cand annotated-items)))))
 
+#+end_src
+**** multi-annotate
+#+begin_src emacs-lisp
+
 (defun consult-web--multi-annotate (sources cand)
   (let ((src (consult--multi-source sources cand)))
     (if-let ((fun (plist-get src :annotate)))
@@ -1231,7 +1407,9 @@ POS and CATEGORY are the group ID and category for these items."
          ((and (symbolp fun) (functionp (eval fun)))
           (funcall (eval fun) (cdr (get-text-property 0 'multi-category cand)))))
       )))
-
+#+end_src
+**** multi-dynamic-candidates-update
+#+begin_src emacs-lisp
 (defun cosnult-web--multi-dynamic-candidates-update (async sources candidates input)
     (let ((idx 0))
       (seq-doseq (src sources)
@@ -1281,6 +1459,10 @@ POS and CATEGORY are the group ID and category for these items."
       candidates)
   )
 
+#+end_src
+
+**** multi-dynamic-compute
+#+begin_src emacs-lisp
 (defun consult-web--multi-dynamic-compute (async sources &optional debounce)
   "Dynamic computation of candidates.
 ASYNC is the sink.
@@ -1331,6 +1513,9 @@ should be restarted."
          (funcall async 'destroy))
         (_ (funcall async action))))))
 
+#+end_src
+**** multi--sink
+#+begin_src emacs-lisp
 (defun consult-web--async-sink ()
   "Create ASYNC sink function.
 
@@ -1372,6 +1557,11 @@ string   Update with the current user input string.  Return nil."
          (setq last (last (if last (setcdr last action) (setq candidates action))))
          candidates)))))
 
+#+end_src
+
+
+**** multi-async
+#+begin_src emacs-lisp
 (defun consult-web--multi-async (async sources)
   "Merge the results of (a)sync SOURCES and pass it to function ASYNC."
   (let ((candidates (make-vector (length sources) nil)))
@@ -1421,7 +1611,9 @@ string   Update with the current user input string.  Return nil."
                      )))
                (cl-incf idx)))))
         (_ (funcall async action))))))
-
+#+end_src
+**** consult-web--multi
+#+begin_src emacs-lisp
 (defun consult-web--multi-dynamic (sources &rest options)
   (let* ((sources (consult--multi-enabled-sources sources))
          (selected
@@ -1454,13 +1646,21 @@ string   Update with the current user input string.  Return nil."
         (funcall fun (car selected)))
       (setq selected `(,(car selected) :match t ,@(cdr selected))))
     selected))
-
+#+end_src
+** Macro
+*** make a variable for source
+**** make symbol for source name
+#+begin_src emacs-lisp
 (defun consult-web--source-name (source-name &optional suffix)
   "Returns a symbol for SOURCE-NAME variable.
 
 The variable is consult-web--source-%s (%s=source-name).
 Adds suffix to the name if provided."
   (intern (format "consult-web--source-%s" (concat (replace-regexp-in-string " " "-" (downcase source-name)) (if suffix (downcase suffix) nil)))))
+
+#+end_src
+**** make generic docstring for varibale of source
+#+begin_src emacs-lisp
 
 (defun consult-web--source-generate-docstring (source-name)
   "Makes a generic documentation string for SOURCE-NAME.
@@ -1469,12 +1669,19 @@ This is used in `consult-web-define-source' macro to make generic
 docstrings for variables."
   (format "consult-web source for %s.\n \nThis function was defined by the macro `consult-web-define-source'."
           (capitalize source-name)))
+#+end_src
+*** make a function for source
+**** make a function symbol for source
+#+begin_src emacs-lisp
 
 (defun consult-web--func-name (source-name &optional prefix suffix)
   "Make a function symbol for interactive command for SOURCE-NAME.
 
 Adds prefix and suffix if non-nil."
   (intern (concat "consult-web-" (if prefix prefix) (replace-regexp-in-string " " "-" (downcase source-name)) (if suffix suffix))))
+#+end_src
+**** make generic doctring for function of source
+#+begin_src emacs-lisp
 
 (defun consult-web--func-generate-docstring (source-name &optional dynamic)
   "Make a generic documentaion string for an interactive command.
@@ -1482,7 +1689,9 @@ Adds prefix and suffix if non-nil."
 This is used to make docstring for function made by `consult-web-define-source'."
   (concat "consult-web's " (if dynamic "dynamic ") (format "interactive command to search %s."
                                                              (capitalize source-name))))
-
+#+end_src
+*** make a consult--read source list
+#+begin_src emacs-lisp
 (defun consult-web--make-source-list (source-name request format annotate face narrow-char state preview-key category lookup group sort enabled selection-history)
   "Internal function to make a source for `consult--multi'.
 
@@ -1517,6 +1726,9 @@ instead."
           :enabled ,(or enabled t)
           :sort ,sort
           ))
+#+end_src
+*** make a static interactive command
+#+begin_src emacs-lisp
 
 (defun consult-web--call-static-command (input no-callback args request format face state source-name category lookup selection-history-var annotate preview-key on-callback sort)
   "Internal function to make static `consult--read' command.
@@ -1543,6 +1755,9 @@ instead."
     selected)
   )
 
+#+end_src
+*** make a dynamic interactive command
+#+begin_src emacs-lisp
 (defun consult-web--call-dynamic-command (initial no-callback args source-name request category face lookup search-history-var selection-history-var preview-key)
   "Internal function to make dynamic `consult--read' command.
 
@@ -1568,7 +1783,9 @@ Do not use this function directly, use `consult-web-define-source' macro
       )
     selected
     ))
-
+#+end_src
+*** macro to add a new source
+#+begin_src emacs-lisp
 ;;; Macros
 ;;;###autoload
 (cl-defmacro consult-web-define-source (source-name &rest args &key request format on-preview on-return state on-callback lookup dynamic group narrow-char category search-history selection-history face annotate preview-key docstring enabled sort &allow-other-keys)
@@ -1742,6 +1959,9 @@ variable that this macro creates for %s=SOURCE-NAME.
 
      ,source-name))
 
+#+end_src
+*** make fetch function for consult sources
+#+begin_src emacs-lisp
 ;;;###autoload
 (cl-defmacro consult-web--make-fetch-function (source &rest args &key source-name docstring &allow-other-keys)
   "Make a function for fetching result based on SOURCE.
@@ -1772,6 +1992,9 @@ DOCSTRING is the docstring for the function that is returned."
            (puthash :source (substring-no-properties source)
                     table)
            table)))))))
+#+end_src
+*** make source for consult-web from consult source
+#+begin_src emacs-lisp
 
 (cl-defun consult-web--make-source-from-consult-source (consult-source &rest args &key request format on-preview on-return state on-callback group narrow-char category dynamic search-history selection-history face annotate preview-key docstring &allow-other-keys)
 "Makes a consult-web source from a consult source, CONSULT-SOURCE.
@@ -1809,7 +2032,11 @@ macro. See `consult-web-define-source' for more details"
                                      :dynamic ',dynamic))))
     (display-warning :warning (format "Consult-web: %s is not available. Make sure `consult-notes' is loaded and set up properly" consult-source)))
   )
-
+#+end_src
+** Frontend Interactive commands
+*** consult-web-multi
+**** interactive
+#+begin_src emacs-lisp
 ;;; Frontend Interactive Commands
 (defun consult-web-multi (&optional input sources no-callback &rest args)
   "Interactive “multi-source search”
@@ -1841,7 +2068,10 @@ any callback action.
       (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-callback) (car selected)))
     (car selected)
     ))
-
+#+end_src
+*** consult-web-dynamic
+**** interactive
+#+begin_src emacs-lisp
 (defun consult-web-dynamic (&optional initial sources no-callback &rest args)
   "Interactive “multi-source dynamic search”
 
@@ -1910,7 +2140,10 @@ and the official manual of consult, here: URL `https://github.com/minad/consult'
           (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-callback) selected))
     selected
     ))
-
+#+end_src
+*** consult-web-scholar
+**** interactive
+#+begin_src emacs-lisp
 (defun consult-web-scholar (&optional initial sources no-callback &rest args)
   "Interactive “multi-source acadmic literature” search
 
@@ -1937,7 +2170,10 @@ Refer to `consult-web-dynamic' for more details."
       )
     selected
     ))
-
+#+end_src
+*** consult-web-omni
+**** concatentate all the sources
+#+begin_src emacs-lisp
 (defun consult-web-omni-get-sources (&optional input)
 "Returns a flat list of candidates for input.
 
@@ -1951,7 +2187,9 @@ flattend list of sources."
                                          (eval item))))
 
  consult-web-omni-sources)))
-
+#+end_src
+**** interactive
+#+begin_src emacs-lisp
 (defun consult-web-omni (&optional input sources no-callback &rest args)
 "Interactive “multi-source omni” search.
 This is for using combination of web and local sources defined in
@@ -1985,6 +2223,10 @@ any callback action."
     (car selected)
     ))
 
+#+end_src
+*** consult-web-dynamic-omni
+**** interactive
+#+begin_src emacs-lisp
 (defun consult-web-dynamic-omni (&optional initial sources no-callback &rest args)
   "Interactive “multi-source and dynamic omni search”
 This is for using combination of web and local sources defined in
@@ -2014,16 +2256,486 @@ the minibuffer. See `consult-web-dynamic' for more details."
       (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-callback) selected))
     selected
     ))
-
+#+end_src
+*** consult-web
+#+begin_src emacs-lisp
 (defun consult-web (&rest args)
 "Wrapper function that calls the function in `consult-web-default-interactive-command'.
 
 This is for conviniece to call the favorite consult-web interactive command."
   (interactive)
   (apply consult-web-default-interactive-command args))
-
+#+end_src
+** Provide and Footer
+#+begin_src emacs-lisp
 ;;; provide `consult-web' module
 
 (provide 'consult-web)
 
 ;;; consult-web.el ends here
+#+end_src
+
+* embark
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./consult-web-embark.el
+:END:
+** Header
+#+begin_src emacs-lisp
+;;; consult-web-embark.el --- Emabrk Actions for `consult-web' -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "27.1") (consult "0.34") (consult-web 0.1))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+#+end_src
+** Requirements
+#+begin_src emacs-lisp
+;;; Requirements
+
+(require 'embark)
+(require 'consult-web)
+
+#+end_src
+** General
+*** actions
+#+begin_src emacs-lisp
+;;; Define Embark Action Functions
+
+(defun consult-web-embark-default-action (cand)
+  "Calls the default action on CAND.
+
+Gets the default callback function from `consult-web-sources-alist'."
+  (let* ((source (and (stringp cand) (get-text-property 0 :source cand))))
+    (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-callback) cand))
+  )
+
+(add-to-list 'embark-default-action-overrides '(consult-web . consult-web-embark-default-action))
+
+
+(defun consult-web-embark-insert-title (cand)
+  "Insert the title oif the candidate at point"
+  (if-let ((title (and (stringp cand) (get-text-property 0 :title cand))))
+      (insert (format " %s " title))))
+
+(defun consult-web-embark-copy-title-as-kill (cand)
+  "Copy the title of the candidate to `kill-ring'."
+  (if-let ((title (and (stringp cand) (get-text-property 0 :title cand))))
+      (kill-new (string-trim title))))
+
+(defun consult-web-embark-insert-url-link (cand)
+  "Insert the title oif the candidate at point."
+  (let* ((url (and (stringp cand) (get-text-property 0 :url cand)))
+         (url (and (stringp url) (string-trim url)))
+         (title (and (stringp cand) (get-text-property 0 :title cand))))
+    (when url
+      (cond
+       ((derived-mode-p 'org-mode)
+        (insert (cond
+                 ((and url title) (format " [[%s][%s]] " url title))
+                 (url (format " [[%s]] " url))
+                 (t ""))
+                ))
+       ((derived-mode-p 'markdown-mode)
+        (insert (cond
+                 ((and url title) (format " [%s](%s) " url title))
+                 (url (format " <%s> " url))
+                 (t ""))
+                ))
+       (t
+        (insert (cond
+                 ((and url title) (format " %s (%s) " title  url))
+                 (url (format " %s " url))
+                 (t ""))
+                ))))))
+
+(defun consult-web-embark-copy-url-as-kill (cand)
+  "Copy the url of the candidate to `kill-ring'."
+  (if-let ((url (and (stringp cand) (get-text-property 0 :url cand))))
+      (kill-new (format " %s " (string-trim url)))
+    ))
+
+(defun consult-web-embark-external-browse-link (cand)
+  "Open the url with `consult-web-default-browse-function'"
+  (if-let* ((url (and (stringp cand) (get-text-property 0 :url cand))))
+      (funcall consult-web-default-browse-function url)))
+
+(defun consult-web-embark-alternate-browse-link (cand)
+  "Open the url with `consult-web-alternate-browse-function'"
+  (if-let* ((url (and (stringp cand) (get-text-property 0 :url cand))))
+      (funcall consult-web-alternate-browse-function url)))
+
+(defun consult-web-embark-external-browse-search-link (cand)
+  "Open the search url (the search engine page) in the external browser."
+  (if-let* ((search-url (and (stringp cand) (get-text-property 0 :search-url cand))))
+      (funcall #'browse-url search-url)))
+
+(defun consult-web-embark-show-preview (cand)
+  "Get a preview of CAND.
+
+Gets the preview function from `consult-web-sources-alist'."
+  (let* ((source (and (stringp cand) (get-text-property 0 :source cand))))
+    (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-preview) cand))
+  )
+
+#+end_src
+*** keymap
+#+begin_src emacs-lisp
+
+;;; Define Embark Keymaps
+
+(defvar-keymap consult-web-embark-general-actions-map
+  :doc "Keymap for consult-web-embark"
+  :parent embark-general-map
+  "i t"  #'consult-web-embark-insert-title
+  "i u" #'consult-web-embark-insert-url-link
+  "w t" #'consult-web-embark-copy-title-as-kill
+  "w u" #'consult-web-embark-copy-url-as-kill
+  "o o" #'consult-web-embark-external-browse-link
+  "o O" #'consult-web-embark-alternate-browse-link
+  "o s" #'consult-web-embark-external-browse-search-link
+  "o p" #'consult-web-embark-show-preview
+  )
+
+
+(add-to-list 'embark-keymap-alist '(consult-web . consult-web-embark-general-actions-map))
+
+#+end_src
+** Scholar
+*** actions
+#+begin_src emacs-lisp
+(defun consult-web-embark-scholar-external-browse-doi (cand)
+  "Open the DOI url in external browser"
+  (if-let* ((doi (and (stringp cand) (get-text-property 0 :doi cand))))
+      (funcall #'browse-url (concat "https://doi.org/" doi))))
+
+(defun consult-web-embark-scholar-copy-authors-as-kill (cand)
+  "Copy the authors of the candidate to `kill-ring'."
+  (if-let ((authors (and (stringp cand) (get-text-property 0 :authors cand))))
+      (kill-new (string-trim (format " %s " authors)))
+    ))
+
+(defun consult-web-embark-scholar-insert-authors (cand)
+  "Insrt the authors of the candidate at point."
+  (if-let ((authors (and (stringp cand) (get-text-property 0 :authors cand))))
+      (insert (string-trim (mapconcat #'identity authors ", ")))
+    ))
+#+end_src
+*** keymap
+#+begin_src emacs-lisp
+
+(defvar-keymap consult-web-embark-scholar-actions-map
+  :doc "Keymap for consult-web-embark"
+  :parent consult-web-embark-general-actions-map
+  "o d" #'consult-web-embark-scholar-external-browse-doi
+  "w a" #'consult-web-embark-scholar-copy-authors-as-kill
+  "i a" #'consult-web-embark-scholar-insert-authors
+  )
+
+(add-to-list 'embark-keymap-alist '(consult-web-scholar . consult-web-embark-scholar-actions-map))
+
+(add-to-list 'embark-default-action-overrides '(consult-web-scholar . consult-web-embark-default-action))
+
+#+end_src
+** Provide and Footer
+#+begin_src emacs-lisp
+;;; Provide `consul-web-embark' module
+
+(provide 'consult-web-embark)
+
+;;; consult-web-embark.el ends here
+#+end_src
+* sources
+** Multi Sources
+*** all sources
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-sources.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-sources.el --- Sources for Consulting Web Search Engines -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(eval-when-compile
+  (require 'consult-web)
+)
+#+end_src
+**** define all source modules
+#+begin_src emacs-lisp
+(setq consult-web-sources--all-modules-list
+      (list 'consult-web-brave-autosuggest
+            'consult-web-brave))
+#+end_src
+**** add individual or list of sources
+#+begin_src emacs-lisp
+(defun consult-web-sources--load-module (symbol)
+"Loads feature SYMBOL"
+(require symbol))
+
+(defun consult-web-sources-load-modules (&optional list)
+  "Loads the LIST of symbols.
+If list is nil, loads `consult-web-sources-modules-to-load'and if that is nil as well, loads `consult-web-sources--all-modules-list'."
+  (mapcar #'consult-web-sources--load-module (or list consult-web-sources-modules-to-load consult-web-sources--all-modules-list)))
+#+end_src
+**** load the sources
+#+begin_src emacs-lisp
+(consult-web-sources-load-modules)
+#+end_src
+
+
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-sources' module
+
+(provide 'consult-web-sources)
+;;; consult-web-sources.el ends here
+#+end_src
+** Single Source
+*** Brave
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-brave.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-brave.el --- Consulting Brave -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+#+end_src
+
+**** brave
+#+begin_src emacs-lisp
+(defvar consult-web-brave-search-url "https://search.brave.com/search")
+
+(defvar consult-web-brave-url "https://api.search.brave.com/res/v1/web/search")
+
+(defcustom consult-web-brave-api-key nil
+  "Key for Brave API.
+
+See URL `https://brave.com/search/api/' for more info"
+  :group 'consult-web
+  :type '(choice (const :tag "Brave API Key" string)
+                 (function :tag "Custom Function")))
+
+
+(defun consult-web--brave-fetch-results (input callback)
+  ""
+  (pcase-let* ((`(,query . ,args) (consult-web--split-command input))
+               (args (car-safe args))
+               (params `(("q" . ,(url-hexify-string query))
+                         ("count" . ,(format "%s" (or (plist-get args :count) consult-web-default-count)))
+                         ("page" . ,(format "%s" (or (plist-get args :page) 0)))))
+               (headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
+                          ("Accept" . "application/json")
+                          ("Accept-Encoding" . "gzip")
+                          ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-api-key))
+                          )))
+    (consult-web--fetch-url-async consult-web-brave-url 'url
+      :encoding 'utf-8
+      :params params
+      :headers headers
+      :parser #'consult-web--default-url-parse-buffer
+      :callback
+      (lambda (attrs)
+        (when-let* ((raw-results (map-nested-elt attrs '("web" "results")))
+                    (annotated-results
+                     (mapcar (lambda (item)
+                               (let*
+                                   ((source "Brave")
+                                    (url (format "%s" (gethash "url" item)))
+                                    (title (format "%s" (gethash "title" item)))
+                                    (title (and (stringp title)
+                                                (propertize title 'face 'consult-web-engine-source-face)))
+                                    (urlobj (and url (url-generic-parse-url url)))
+                                    (domain (and (url-p urlobj) (url-domain urlobj)))
+                                    (domain (and (stringp domain)
+                                                 (propertize domain 'face 'font-lock-variable-name-face)))
+                                    (path (and (url-p urlobj) (url-filename urlobj)))
+                                    (path (and (stringp path)
+                                               (propertize path 'face 'font-lock-warning-face)))
+                                    (search-url nil)
+
+                                    (decorated (concat title "\t"
+                                                       (propertize " " 'display '(space :align-to center))
+                                                       domain path " "
+                                                       )))
+                                 (propertize decorated
+                                             :source source
+                                             :title title
+                                             :url url
+                                             :search-url search-url
+                                             :query query)))
+
+                             raw-results)))
+          (funcall callback annotated-results))))))
+
+(consult-web-define-source "Brave"
+                           :narrow-char ?b
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--brave-fetch-results
+                           :preview-key consult-web-preview-key
+                           :search-history 'consult-web--search-history
+                           :selection-history 'consult-web--selection-history
+                           :enabled (lambda () #'my:brave-key)
+                           :group #'consult-web--group-function
+                           :sort t
+                           :dynamic 'both
+                           :annotate nil
+                           )
+#+end_src
+
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-brave' module
+
+(provide 'consult-web-brave)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-brave)
+;;; consult-web-brave.el ends here
+#+end_src
+*** Brave AutoSuggest
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-brave-autosuggest.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-brave-autosuggest.el --- Consulting Brave Autosuggest -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+#+end_src
+
+**** brave autosuggest
+#+begin_src emacs-lisp
+(defvar consult-web-brave-autosuggest-api-url "https://api.search.brave.com/res/v1/suggest/search")
+
+(defcustom consult-web-brave-autosuggest-api-key nil
+  "Key for Brave Autosuggest API.
+
+See URL `https://brave.com/search/api/' for more info"
+  :group 'consult-web
+  :type '(choice (const :tag "Brave Autosuggest API Key" string)
+                 (function :tag "Custom Function")))
+
+(defun consult-web--brave-autosuggest-fetch-results (input callback)
+  ""
+  (pcase-let* ((`(,query . ,args) (consult-web--split-command input))
+               (args (car-safe args))
+               (params  `(("q" . ,query)
+                          ("count" . ,(format "%s" (or (plist-get args :count) consult-web-default-count)))
+                          ("page" . ,(format "%s" (or (plist-get args :page) 0)))
+                          ("country" . "US")))
+               (headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
+                          ("Accept" . "application/json")
+                          ("Accept-Encoding" . "gzip")
+                          ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-autosuggest-api-key))
+                          )))
+    (consult-web--fetch-url-async consult-web-brave-autosuggest-api-url 'url
+                                  :params params
+                                  :headers headers
+                                  :parser #'consult-web--default-url-parse-buffer
+                                  :callback
+                                  (lambda (attrs)
+                                    (when-let* ((original (make-hash-table :test 'equal))
+                                                (_ (puthash "query" (gethash "original" (gethash "query" attrs)) original))
+                                                (raw-results  (append (map-nested-elt attrs '("results")) (list original)))
+                                                (annotated-results
+                                                 (mapcar (lambda (item)
+                                                           (let* ((source "Brave AutoSuggest")
+                                                                  (word (gethash "query" item))
+                                                                  (url (concat "https://search.brave.com/search?q="  (replace-regexp-in-string " " "+" word)))
+                                                                  (urlobj (and url (url-generic-parse-url url)))
+                                                                  (domain (and (url-p urlobj) (url-domain urlobj)))
+                                                                  (domain (and (stringp domain)
+                                                                               (propertize domain 'face 'font-lock-variable-name-face)))
+                                                                  (path (and (url-p urlobj) (url-filename urlobj)))
+                                                                  (path (and (stringp path)
+                                                                             (propertize path 'face 'font-lock-warning-face)))
+                                                                  (search-url nil)
+                                                                  (decorated (concat word "\t"
+                                                                                     (propertize " " 'display '(space :align-to center))
+
+                                                                                     )))
+                                                             (propertize decorated
+                                                                         :source source
+                                                                         :title word
+                                                                         :url url
+                                                                         :search-url search-url
+                                                                         :query query)))
+
+                                                         raw-results)))
+                                      (funcall callback annotated-results))))))
+
+(consult-web-define-source "Brave AutoSuggest"
+                           :narrow-char ?B
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--brave-autosuggest-fetch-results
+                           :group #'consult-web--group-function
+                           :on-preview #'ignore
+                           :on-return #'string-trim
+                           :on-callback #'string-trim
+                           :search-history 'consult-web--search-history
+                           :selection-history t
+                           :enabled (lambda () #'my:brave-autosuggest-key)
+                           :sort t
+                           :dynamic 'both
+                           )
+#+end_src
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-brave-autosuggest' module
+
+(provide 'consult-web-brave-autosuggest)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-brave-autosuggest)
+;;; consult-web-brave-autosuggest.el ends here
+#+end_src
+
+
