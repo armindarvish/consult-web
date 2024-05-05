@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
 * url-retrieve
 #+begin_src emacs-lisp :lexical t
@@ -500,3 +501,508 @@ PARSER is a function that is executed in the url-retrieve response buffer and th
 #+end_src
 
 #+RESULTS:
+||||||| parent of 2f8257f (add indicator)
+=======
+
+* url-retrieve
+#+begin_src emacs-lisp :lexical t
+(cl-defun consult-web--url-retrieve (url &rest settings &key params headers parser data (type "GET") callback error encoding timeout)
+"Retrieves URL synchronously.
+
+Passes all the arguments to url-retriev and fetches the results.
+
+PARAMS are parameters added to the base url using `consult-web--make-url-string'.
+HEADERS are headers passed to `url-request-extra-headers'.
+DATA are http request data passed to `url-request-data'.
+TYPE is the http request type (e.g. “GET”, “POST”)
+ERROR
+ENCODING
+TIMEOUT
+PARSER is a function that is executed in the url-retrieve response buffer and the results are returned s the output of this function.
+"
+  (let* ((url-request-method type)
+         (url-request-extra-headers headers)
+         (url-request-data data)
+         (url-with-params (consult-web--make-url-string url params)))
+    (url-retrieve url-with-params
+                  (lambda (_) (let* ((attrs (funcall parser)))
+                                (funcall callback attrs))) nil 'silent))
+                 )
+
+(cl-defun consult-web--url-retrieve (url &rest settings &key params headers parser data (type "GET") callback error encoding timeout)
+"Retrieves URL synchronously.
+
+Passes all the arguments to url-retriev and fetches the results.
+
+PARAMS are parameters added to the base url using `consult-web--make-url-string'.
+HEADERS are headers passed to `url-request-extra-headers'.
+DATA are http request data passed to `url-request-data'.
+TYPE is the http request type (e.g. “GET”, “POST”)
+ERROR
+ENCODING
+TIMEOUT
+PARSER is a function that is executed in the url-retrieve response buffer and the results are returned s the output of this function.
+"
+  (let* ((url-request-method type)
+         (url-request-extra-headers headers)
+         (url-request-data data)
+         (url-with-params (consult-web--make-url-string url params))
+         (response-data nil)
+         (buffer (if timeout
+                     (with-timeout
+                         (timeout
+                          (setf response-data (plist-put response-data :status 'timeout))
+                          nil)
+                       (url-retrieve url-with-params
+                                     (lambda (_) (when-let* ((attrs (funcall parser)))
+                                                   (funcall callback attrs))) nil 'silent))
+                   (url-retrieve url-with-params
+                                 (lambda (_) (let* ((attrs (funcall parser)))
+                                               (funcall callback attrs))) nil 'silent))
+                 ))
+
+    (when buffer
+      (with-current-buffer buffer
+        (when consult-web-log-level
+          (save-excursion
+            (goto-char (point-min))
+            (cond
+             ((eq consult-web-log-level 'info)
+              (consult-web--log (format "URL: %s\nRESPONSE: %s" url (buffer-substring (point-min) (pos-eol)))))
+             ((eq consult-web-log-level 'debug)
+                 (consult-web--log (format "URL: %s\n\nRESPONSE-HEADER:\n%s\n\nRESPONSE-BODY: %s\n" url (buffer-substring (point-min) url-http-end-of-headers) (buffer-substring url-http-end-of-headers (point-max))))))
+            ))
+    )
+    )))
+
+
+#+end_src
+
+#+RESULTS:
+: consult-web--url-retrieve
+
+
+#+begin_src emacs-lisp
+;; (cl-defun consult-web--request (url &rest args &key params headers parser callback data type error encoding timeout &allow-other-keys)
+;; ""
+;; (request url
+;;   :type type
+;;   :params params
+;;   :headers headers
+;;   :parser parser
+;;   :complete (cl-function (lambda (&key data &allow-other-keys))
+;;                          (funcall callback data)))
+
+;;   )
+#+end_src
+#+RESULTS:
+: consult-web--url-retrieve
+
+* universal
+#+begin_src emacs-lisp :lexical t
+(cl-defun consult-web--url-retrieve-async (url backend &rest args &key params headers parser callback data type error encoding timeout &allow-other-keys)
+"Retrieves URL synchronously.
+
+Passes all the arguments to `consult-web--url-retrieve-synchronously' and in trun to `url-retrieve' fetches the results.
+
+PARAMS are parameters added to the base url using `consult-web--make-url-string'.
+HEADERS are headers passed to `url-request-extra-headers'.
+DATA are http request data passed to `url-request-data'.
+TYPE is the http request type (e.g. “GET”, “POST”)
+ERROR
+ENCODING
+TIMEOUT
+PARSER is a function that is executed in the url-retrieve response buffer and the results are returned s the output of this function.
+"
+  (let* ((encoding (or encoding 'utf8))
+         (timeout (or timeout consult-web-default-timeout))
+         (er (or error #'consult-web--error-handler))
+         )
+    (cond
+     ((eq backend 'plz)
+      (funcall #'plz (or type 'get) (consult-web--make-url-string url params)
+               :headers headers
+               :as parser
+               :then callback
+               :else er))
+     ((eq backend 'url)
+      (funcall #'consult-web--url-retrieve url
+               :type (or type "GET")
+               :params params
+               :headers headers
+               :parser parser
+               :data data
+               :error er
+               :callback callback
+               :encoding encoding
+               :timeout timeout))
+     ((eq backend 'request)
+      (funcall #'request url
+               :params params
+               :headers headers
+               :parser parser
+               :data data
+               :error er
+               :encoding encoding
+               :timeout timeout
+               :complete (cl-function (lambda (&key data &allow-other-keys)
+                                        (funcall callback data)))
+                                     )))))
+#+end_src
+
+#+RESULTS:
+: consult-web--url-retrieve-async
+
+* plz
+#+begin_src emacs-lisp :lexical t
+(defun cw--url-parse-buffer ()
+  (goto-char (point-min))
+  (condition-case nil
+      (json-parse-buffer :object-type 'hash-table :array-type 'list :false-object :false :null-object :null)
+    (error nil)))
+
+(defun cw-brave-query-args (plz-callback)
+  (declare (indent 1))
+  (list :headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
+                   ("Accept" . "application/json")
+                   ("Accept-Encoding" . "gzip")
+                   ("X-Subscription-Token" . ,(let ((key cw-brave-api-key))
+                                                (if (functionp key) (funcall key) key))))
+        :as #'cw--url-parse-buffer
+        :then plz-callback
+        :else (lambda (plz-error) (message "%S" plz-error))))
+
+(defun cw--brave-request (query callback)
+  (apply
+   #'plz 'get (cw-brave-url-string query)
+   (cw-brave-query-args
+       (lambda (attrs &rest args)
+         (when-let* ((raw-results (map-nested-elt attrs '("web" "results")))
+                     (annotated-results  (mapcar (lambda (item)
+                                                   (let*
+                                                       ((url (format "%s" (gethash "url" item)))
+                                                        (title (format "%s" (gethash "title" item)))
+                                                        (urlobj (and url (url-generic-parse-url url)))
+                                                        (domain (and (url-p urlobj) (url-domain urlobj)))
+                                                        (domain (and (stringp domain)
+                                                                     (propertize domain 'face 'font-lock-variable-name-face)))
+                                                        (path (and (url-p urlobj) (url-filename urlobj)))
+                                                        (path (and (stringp path)
+                                                                   (propertize path 'face 'font-lock-warning-face)))
+                                                        (search-url (cw-brave-url-string query))
+
+                                                        (decorated (concat title "\t"
+                                                                           (propertize " " 'display '(space :align-to center))
+                                                                           domain path
+                                                                           )))
+                                                     (propertize decorated
+                                                                 :source "Brave"
+                                                                 :title title
+                                                                 :url url
+                                                                 :search-url search-url
+                                                                 :query query)))
+
+                                                 raw-results))))))))
+
+(defun cw--brave-request (query callback)
+  (pcase-let* ((`(,input . ,args) (cw--split-command query))
+               (args (car-safe args))
+               (params `(("q" . ,(url-hexify-string input))
+                         ("count" . ,(format "%s" (or (plist-get args :count) cw--count)))
+                         ("page" . ,(format "%s" (or (plist-get args :page) 0)))))
+               (headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
+                          ("Accept" . "application/json")
+                          ("Accept-Encoding" . "gzip")
+                          ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-api-key))
+                          )))
+    (consult-web--url-retrieve-async consult-web-brave-url 'plz
+                                     :params params
+                                     :headers headers
+                                     :parser (lambda ()
+                                               (goto-char (point-min))
+                                               (json-parse-buffer :object-type 'hash-table :array-type 'list :false-object :false :null-object :null))
+                                     :error (lambda (plz-error) (message "%S" plz-error))
+                                     :callback (lambda (attrs &rest args)
+                                                 (when-let* ((raw-results (map-nested-elt attrs '("web" "results")))
+                                                             (annotated-results  (mapcar (lambda (item)
+                                                                                           (let*
+                                                                                               ((url (format "%s" (gethash "url" item)))
+                                                                                                (title (format "%s" (gethash "title" item)))
+                                                                                                (urlobj (and url (url-generic-parse-url url)))
+                                                                                                (domain (and (url-p urlobj) (url-domain urlobj)))
+                                                                                                (domain (and (stringp domain)
+                                                                                                             (propertize domain 'face 'font-lock-variable-name-face)))
+                                                                                                (path (and (url-p urlobj) (url-filename urlobj)))
+                                                                                                (path (and (stringp path)
+                                                                                                           (propertize path 'face 'font-lock-warning-face)))
+                                                                                                (search-url (cw-brave-url-string input))
+
+                                                                                                (decorated (concat title "\t"
+                                                                                                                   (propertize " " 'display '(space :align-to center))
+                                                                                                                   domain path
+                                                                                                                   )))
+                                                                                             (propertize decorated
+                                                                                                         :source "Brave"
+                                                                                                         :title title
+                                                                                                         :url url
+                                                                                                         :search-url search-url
+                                                                                                         :query input)))
+
+                                                                                         raw-results)))
+                                                   (funcall callback annotated-results))))))
+
+#+end_src
+
+#+RESULTS:
+: cw--brave-request
+
+* request
+#+begin_src emacs-lisp :lexical t
+(defun cw--url-parse-buffer ()
+  (goto-char (point-min))
+  (condition-case nil
+      (json-parse-buffer :object-type 'hash-table :array-type 'list :false-object :false :null-object :null)
+    (error nil)))
+
+(defun cw--brave-request (query callback)
+(pcase-let* ((`(,query . ,args) (cw--split-command input))
+             (args (car-safe args))
+             (params `(("q" . ,(url-hexify-string query))
+                         ("count" . ,(format "%s" (or (plist-get args :count) cw--count)))
+                         ("page" . ,(format "%s" (or (plist-get args :page) 0)))))
+             (headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
+                          ("Accept" . "application/json")
+                          ("Accept-Encoding" . "gzip")
+                          ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-api-key))
+                          )))
+    (request consult-web-brave-url
+      :params params
+      :headers headers
+      :parser #'cw--url-parse-buffer
+      :success (cl-function (lambda (&key data &allow-other-keys)
+                              (when data
+                                (let* ((raw-results (map-nested-elt data '("web" "results")))
+                                       (annotated-items  (mapcar (lambda (item)
+                                                                   (let*
+                                                                       ((url (format "%s" (gethash "url" item)))
+                                                                        (title (format "%s" (gethash "title" item)))
+                                                                        (urlobj (and url (url-generic-parse-url url)))
+                                                                        (domain (and (url-p urlobj) (url-domain urlobj)))
+                                                                        (domain (and (stringp domain)
+                                                                                     (propertize domain 'face 'font-lock-variable-name-face)))
+                                                                        (path (and (url-p urlobj) (url-filename urlobj)))
+                                                                        (path (and (stringp path)
+                                                                                   (propertize path 'face 'font-lock-warning-face)))
+                                                                        (search-url (consult-web--make-url-string consult-web-brave-search-url params))
+
+                                                                        (decorated (concat title "\t"
+                                                                                           (propertize " " 'display '(space :align-to center))
+                                                                                           domain path
+                                                                                           )))
+                                                                     (propertize decorated
+                                                                                 :source "Brave"
+                                                                                 :title title
+                                                                                 :url url
+                                                                                 :search-url search-url
+                                                                                 :query query)))
+
+                                                                 raw-results)))
+                                  (puthash "candidates" annotated-items data)
+                                  ))))
+      :complete (cl-function (lambda (&key data &allow-other-keys)
+                  (funcall callback (gethash "candidates" data)))))))
+
+(defun cw--brave-request (input callback)
+  (pcase-let* ((`(,query . ,args) (cw--split-command input))
+               (args (car-safe args))
+               (params `(("q" . ,(url-hexify-string query))
+                         ("count" . ,(format "%s" (or (plist-get args :count) cw--count)))
+                         ("page" . ,(format "%s" (or (plist-get args :page) 0)))))
+               (headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
+                          ("Accept" . "application/json")
+                          ("Accept-Encoding" . "gzip")
+                          ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-api-key))
+                          )))
+    (consult-web--url-retrieve-async consult-web-brave-url 'request
+                                     :encoding 'utf-8
+                                     :params params
+                                     :headers headers
+                                     :parser #'cw--url-parse-buffer
+                                     :callback (lambda (attrs)
+                                                 (when-let* ((raw-results (map-nested-elt attrs '("web" "results")))
+                                                             (annotated-results  (mapcar (lambda (item)
+                                                                                           (let*
+                                                                                               ((url (format "%s" (gethash "url" item)))
+                                                                                                (title (format "%s" (gethash "title" item)))
+                                                                                                (urlobj (and url (url-generic-parse-url url)))
+                                                                                                (domain (and (url-p urlobj) (url-domain urlobj)))
+                                                                                                (domain (and (stringp domain)
+                                                                                                             (propertize domain 'face 'font-lock-variable-name-face)))
+                                                                                                (path (and (url-p urlobj) (url-filename urlobj)))
+                                                                                                (path (and (stringp path)
+                                                                                                           (propertize path 'face 'font-lock-warning-face)))
+                                                                                                (search-url nil)
+
+                                                                                                (decorated (concat title "\t"
+                                                                                                                   (propertize " " 'display '(space :align-to center))
+                                                                                                                   domain path
+                                                                                                                   )))
+                                                                                             (propertize decorated
+                                                                                                         :source "Brave"
+                                                                                                         :title title
+                                                                                                         :url url
+                                                                                                         :search-url search-url
+                                                                                                         :query query)))
+
+                                                                                         raw-results)))
+(funcall callback annotated-results))))))
+#+end_src
+
+
+* url-retrieve
+#+begin_src emacs-lisp :lexical t
+(defun cw--url-parse-buffer ()
+  (goto-char (point-min))
+  (condition-case nil
+      (json-parse-buffer :object-type 'hash-table :array-type 'list :false-object :false :null-object :null)
+    (error nil)))
+
+(defun cw--brave-request (query callback)
+  (let ((url-request-method "GET")
+        (url-request-extra-headers
+         `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
+           ("Accept" . "application/json")
+           ("Accept-Encoding" . "gzip")
+           ("X-Subscription-Token" . ,(let ((key cw-brave-api-key))
+                                        (if (functionp key) (funcall key) key))))))
+    (url-retrieve (cw-brave-url-string query)
+                  (lambda (_)
+                    (when-let* ((attrs (cw--url-parse-buffer))
+                                (raw-results (map-nested-elt attrs '(:web :results)))
+                                (annotated-results
+                                 (mapcar
+                                  (lambda (item)
+                                    (let* ((title (map-elt item :title))
+                                           (search-url (cw-brave-url-string query))
+                                           (url (map-elt item :url))
+                                           (urlobj (and url (url-generic-parse-url url)))
+                                           (domain (and (url-p urlobj) (url-domain urlobj))) ;we modify domain here
+                                           (domain (and (stringp domain)
+                                                        (propertize domain 'face 'font-lock-variable-name-face)))
+                                           (path (and (url-p urlobj) (url-filename urlobj)))
+                                           (path (and (stringp path)
+                                                      (propertize path 'face 'font-lock-warning-face)))
+                                           (decorated (concat title "\t"
+                                                              (propertize " " 'display '(space :align-to center))
+                                                              domain path
+                                                              )))
+                                      (propertize decorated
+                                                  :title title
+                                                  :url url
+                                                  :search-url search-url
+                                                  :query query)))
+                                  raw-results)))
+                      (funcall callback annotated-results)))
+                  nil 'silent)))
+
+(defun cw--brave-request (input callback)
+  (pcase-let* ((`(,query . ,args) (cw--split-command input))
+               (args (car-safe args))
+               (params `(("q" . ,(url-hexify-string query))
+                         ("count" . ,(format "%s" (or (plist-get args :count) cw--count)))
+                         ("page" . ,(format "%s" (or (plist-get args :page) 0)))))
+               (headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
+                          ("Accept" . "application/json")
+                          ("Accept-Encoding" . "gzip")
+                          ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-api-key))
+                          )))
+    (consult-web--url-retrieve-async consult-web-brave-url 'url
+                                     :encoding 'utf-8
+                                     :params params
+                                     :headers headers
+                                     :parser #'cw--url-parse-buffer
+                                     :callback (lambda (attrs)
+                                                 (when-let* ((raw-results (map-nested-elt attrs '("web" "results")))
+                                                             (annotated-results  (mapcar (lambda (item)
+                                                                                           (let*
+                                                                                               ((url (format "%s" (gethash "url" item)))
+                                                                                                (title (format "%s" (gethash "title" item)))
+                                                                                                (urlobj (and url (url-generic-parse-url url)))
+                                                                                                (domain (and (url-p urlobj) (url-domain urlobj)))
+                                                                                                (domain (and (stringp domain)
+                                                                                                             (propertize domain 'face 'font-lock-variable-name-face)))
+                                                                                                (path (and (url-p urlobj) (url-filename urlobj)))
+                                                                                                (path (and (stringp path)
+                                                                                                           (propertize path 'face 'font-lock-warning-face)))
+                                                                                                (search-url nil)
+
+                                                                                                (decorated (concat title "\t"
+                                                                                                                   (propertize " " 'display '(space :align-to center))
+                                                                                                                   domain path
+                                                                                                                   )))
+                                                                                             (propertize decorated
+                                                                                                         :source "Brave"
+                                                                                                         :title title
+                                                                                                         :url url
+                                                                                                         :search-url search-url
+                                                                                                         :query query)))
+
+                                                                                         raw-results)))
+(funcall callback annotated-results))))))
+
+#+end_src
+
+#+RESULTS:
+: cw--brave-request
+
+* test
+#+begin_src emacs-lisp :lexical t
+(let* ((url consult-web-brave-url)
+       (params `(("q" . ,(url-hexify-string "emacs"))
+                 ("count" . "5")
+                 ("page" . "0")))
+       (headers  `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
+                   ("Accept" . "application/json")
+                   ("Accept-Encoding" . "gzip")
+                   ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-api-key))
+                   ))
+       (callback 'print)
+       )
+  (consult-web--url-retrieve url
+                             :params params
+                             :headers headers
+                             :parser #'cw--url-parse-buffer
+                             :callback
+                             (lambda (attrs)
+                               (when-let* ((raw-results (map-nested-elt attrs '("web" "results")))
+                                           (annotated-results  (mapcar (lambda (item)
+                                                                       (let*
+                                                                           ((url (format "%s" (gethash "url" item)))
+                                                                            (title (format "%s" (gethash "title" item)))
+                                                                            (urlobj (and url (url-generic-parse-url url)))
+                                                                            (domain (and (url-p urlobj) (url-domain urlobj)))
+                                                                            (domain (and (stringp domain)
+                                                                                         (propertize domain 'face 'font-lock-variable-name-face)))
+                                                                            (path (and (url-p urlobj) (url-filename urlobj)))
+                                                                            (path (and (stringp path)
+                                                                                       (propertize path 'face 'font-lock-warning-face)))
+                                                                            (search-url (consult-web--make-url-string consult-web-brave-search-url params))
+
+                                                                            (decorated (concat title "\t"
+                                                                                               (propertize " " 'display '(space :align-to center))
+                                                                                               domain path
+                                                                                               )))
+                                                                         (propertize decorated
+                                                                                     :source "Brave"
+                                                                                     :title title
+                                                                                     :url url
+                                                                                     :search-url search-url
+                                                                                     :query query)))
+
+                                                                     raw-results)))
+
+                               (funcall callback annotated-results)))))
+#+end_src
+
+#+RESULTS:
+>>>>>>> 2f8257f (add indicator)

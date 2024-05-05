@@ -512,6 +512,7 @@ Ommits keys in IGNORE-KEYS."
      hashtable)
     (apply #'append pl)))
 #+end_src
+
 **** expand function in variable
 #+begin_src emacs-lisp
 
