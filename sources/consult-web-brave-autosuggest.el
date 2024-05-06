@@ -28,18 +28,20 @@ See URL `https://brave.com/search/api/' for more info"
 
 (defun consult-web--brave-autosuggest-fetch-results (input callback)
   ""
-  (pcase-let* ((`(,query . ,args) (consult-web--split-command input))
-               (args (car-safe args))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+               (args (car-safe opts))
+               (count (or (plist-get opts :count) consult-web-default-count))
+               (page (or (plist-get opts :page) consult-web-default-page))
                (params  `(("q" . ,query)
-                          ("count" . ,(format "%s" (or (plist-get args :count) consult-web-default-count)))
-                          ("page" . ,(format "%s" (or (plist-get args :page) 0)))
+                          ("count" . ,(format "%s" count))
+                          ("page" . ,(format "%s" page))
                           ("country" . "US")))
                (headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
                           ("Accept" . "application/json")
                           ("Accept-Encoding" . "gzip")
                           ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-autosuggest-api-key))
                           )))
-    (consult-web--fetch-url-async consult-web-brave-autosuggest-api-url 'url
+    (consult-web--fetch-url consult-web-brave-autosuggest-api-url consult-web-http-retrieve-backend
                                   :params params
                                   :headers headers
                                   :parser #'consult-web--default-url-parse-buffer

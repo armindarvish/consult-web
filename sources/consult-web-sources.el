@@ -19,7 +19,11 @@
 
 (setq consult-web-sources--all-modules-list
       (list 'consult-web-brave-autosuggest
-            'consult-web-brave))
+            'consult-web-brave
+            'consult-web-doi
+            'consult-web-pubmed
+            'consult-web-scopus
+            'consult-web-wikipedia))
 
 (defun consult-web-sources--load-module (symbol)
 "Loads feature SYMBOL"

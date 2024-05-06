@@ -1,4 +1,4 @@
-;;; consult-web-brave.el --- Consulting Brave -*- lexical-binding: t -*-
+;;; consult-web-wikipedia.el --- Consulting Wikipedia -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2024 Armin Darvish
 
@@ -16,47 +16,42 @@
 
 (require 'consult-web)
 
-(defvar consult-web-brave-search-url "https://search.brave.com/search")
+(defvar consult-web-wikipedia-search-url "https://www.wikipedia.org/search-redirect.php")
+(defvar consult-web-wikipedia-url "https://wikipedia.org/")
+(defvar consult-web-wikipedia-api-url "https://wikipedia.org/w/api.php")
 
-(defvar consult-web-brave-url "https://api.search.brave.com/res/v1/web/search")
-
-(defcustom consult-web-brave-api-key nil
-  "Key for Brave API.
-
-See URL `https://brave.com/search/api/' for more info"
-  :group 'consult-web
-  :type '(choice (const :tag "Brave API Key" string)
-                 (function :tag "Custom Function")))
-
-
-(defun consult-web--brave-fetch-results (input callback)
+(defun consult-web--wikipedia-fetch-results (input callback)
   ""
   (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
-               (args (car-safe otps))
+               (opts (car-safe opts))
                (count (or (plist-get opts :count) consult-web-default-count))
                (page (or (plist-get opts :page) consult-web-default-page))
-               (params `(("q" . ,(url-hexify-string query))
-                         ("count" . ,(format "%s" count))
-                         ("page" . ,(format "%s" page))))
-               (headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
-                          ("Accept" . "application/json")
-                          ("Accept-Encoding" . "gzip")
-                          ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-api-key))
-                          )))
-    (consult-web--fetch-url consult-web-brave-url consult-web-http-retrieve-backend
+               (params `(("action" . "query")
+                 ("format" . "json")
+                 ("list" . "search")
+                 ("formatversion" . "2")
+                 ("prop" . "info")
+                 ("inprop" . "url")
+                 ("srwhat" . "text")
+                 ("srsearch" . ,(url-hexify-string query))
+                 ("srlimit" . ,(format "%s" count))
+                 ("sroffset" . ,(format "%s" page))))
+               (headers '(("User-Agent" . "Emacs:consult-web/0.1 (https://github.com/armindarvish/consult-web);"))))
+    (consult-web--fetch-url consult-web-wikipedia-api-url consult-web-http-retrieve-backend
       :encoding 'utf-8
       :params params
       :headers headers
       :parser #'consult-web--default-url-parse-buffer
       :callback
       (lambda (attrs)
-        (when-let* ((raw-results (map-nested-elt attrs '("web" "results")))
+        (when-let* ((raw-results (map-nested-elt attrs '("query" "search")))
+                    (titles  (mapcar (lambda (item) (format "%s" (gethash "title" item))) raw-results))
                     (annotated-results
                      (mapcar (lambda (item)
                                (let*
-                                   ((source "Brave")
-                                    (url (format "%s" (gethash "url" item)))
-                                    (title (format "%s" (gethash "title" item)))
+                                   ((source "Wikipedia")
+                                    (url (concat consult-web-wikipedia-url "wiki/" (string-replace " " "_" item)))
+                                    (title (format "%s" item))
                                     (title (and (stringp title)
                                                 (propertize title 'face 'consult-web-engine-source-face)))
                                     (urlobj (and url (url-generic-parse-url url)))
@@ -66,7 +61,7 @@ See URL `https://brave.com/search/api/' for more info"
                                     (path (and (url-p urlobj) (url-filename urlobj)))
                                     (path (and (stringp path)
                                                (propertize path 'face 'font-lock-warning-face)))
-                                    (search-url nil)
+                                    (search-url (concat  consult-web-wikipedia-search-url "?" "search=" query))
 
                                     (decorated (concat title "\t"
                                                        (propertize " " 'display '(space :align-to center))
@@ -79,27 +74,26 @@ See URL `https://brave.com/search/api/' for more info"
                                              :search-url search-url
                                              :query query)))
 
-                             raw-results)))
-          (funcall callback annotated-results)
-          annotated-results)))))
+                             titles)))
+          (funcall callback annotated-results))))))
 
-(consult-web-define-source "Brave"
-                           :narrow-char ?b
+
+(consult-web-define-source "Wikipedia"
+                           :narrow-char ?w
                            :face 'consult-web-engine-source-face
-                           :request #'consult-web--brave-fetch-results
+                           :request #'consult-web--wikipedia-fetch-results
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () #'my:brave-key)
+                           :enabled (lambda () "true")
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both
-                           :annotate nil
-                           )
+                            )
 
-;;; provide `consult-web-brave' module
+;;; provide `consult-web-wikipedia' module
 
-(provide 'consult-web-brave)
+(provide 'consult-web-wikipedia)
 
-(add-to-list 'consult-web-sources-modules-to-load 'consult-web-brave)
-;;; consult-web-brave.el ends here
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-wikipedia)
+;;; consult-web-wikipedia.el ends here

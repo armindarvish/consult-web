@@ -193,6 +193,13 @@ or by using `consult-web--make-source-from-consult-source'."
   :type '(choice (function :tag "(Default) url-retrieve backend" #'consult-web-url-retrieve-sync)
                  (function :tag "Emacs Request Backend"  #'consult-web--request-sync)))
 
+(defcustom consult-web-http-retrieve-backend 'url
+  "Which command should `consult-web' use for url requests?"
+  :type   '(choice
+          (const :tag "(Default) Built-in Emacs's url-retrive" 'url)
+          (const :tag "`request' backend" 'request)
+          (const :tag "`plz' backend" 'plz)))
+
 (defcustom consult-web-default-autosuggest-command nil
   "Which command should `consult-web' use for auto suggestion on search input?"
   :type '(choice (function :tag "(default) use brave autosuggestion (i.e. `consult-web-dynamic-brave-autosuggest')" #'consult-web-dynamic-brave-autosuggest)
@@ -493,7 +500,7 @@ Ommits keys in IGNORE-KEYS."
   "Handles errors for consult-web-url-retrieve functions."
   (message "consult-web: url-retrieve got an error: %s" (consult-web--parse-http-response)))
 
-(cl-defun consult-web--url-retrieve-synchronously (url &rest settings &key params headers parser data (type "GET") error (encoding 'utf-8) timeout)
+(cl-defun consult-web--url-retrieve-synchronously (url &rest settings &key params headers parser callback data (type "GET") error (encoding 'utf-8) timeout)
 "Retrieves URL synchronously.
 
 Passes all the arguments to url-retriev and fetches the results.
@@ -647,6 +654,79 @@ TIMEOUT is the time in seconds for timing out the request.
         )
     )))
 
+(cl-defun consult-web-url-retrieve (url &rest settings &key params headers parser data (sync 'nil) (type "GET") callback error (encoding 'utf-8) timeout)
+  "Retrieves URL synchronously.
+
+Passes all the arguments to url-retrieve
+and fetches the results asynchronously.
+
+TYPE is the http request type (e.g. “GET”, “POST”)
+
+PARAMS are parameters added to the base url
+using `consult-web--make-url-string'.
+
+HEADERS are headers passed to headers (e.g. `url-request-extra-headers').
+
+DATA are http request data passed to data (e.g. `url-request-data').
+
+PARSER is a function that is executed in the url-retrieve
+response buffer and the results are returned s the output of this function.
+
+CALLBACK is the function that is executed when the request is complete.
+
+ERROR is a function that handles errors.
+
+ENCODING is the encoding used for the request (e.g. 'utf-8).
+
+TIMEOUT is the time in seconds for timing out the request.
+"
+  (let* ((url-request-method type)
+         (url-request-extra-headers headers)
+         (url-request-data data)
+         (url-with-params (consult-web--make-url-string url params))
+         (response-data nil)
+         (buffer (if timeout
+                     (with-timeout
+                         (timeout
+                          (setf response-data (plist-put response-data :status 'timeout))
+                          nil)
+                       (if sync
+                           (url-retrieve-synchronously url-with-params nil 'silent)
+                         (url-retrieve url-with-params
+                                       (lambda (_)
+                                         (when-let* ((attrs (condition-case nil
+                                                                (funcall parser)
+                                                              (error (funcall error)))))
+                                           (funcall callback attrs))) nil 'silent)))
+                   (if sync
+                       (url-retrieve-synchronously url-with-params nil 'silent)
+                     (url-retrieve url-with-params
+                                   (lambda (_) (let* ((attrs (condition-case nil
+                                                                 (funcall parser)
+                                                               (error (funcall error)))))
+                                                 (funcall callback attrs))) nil 'silent)))))
+    (when buffer
+      (with-current-buffer buffer
+        (when consult-web-log-level
+          (save-excursion
+            (goto-char (point-min))
+            (cond
+             ((eq consult-web-log-level 'info)
+              (consult-web--log (format "URL: %s\nRESPONSE: %s" url (buffer-substring (point-min) (pos-eol)))))
+             ((eq consult-web-log-level 'debug)
+              (consult-web--log (format "URL: %s\n\nRESPONSE-HEADER:\n%s\n\nRESPONSE-BODY: %s\n" url (buffer-substring (point-min) url-http-end-of-headers) (buffer-substring url-http-end-of-headers (point-max))))))
+            ))
+        (if (number-or-marker-p url-http-end-of-headers)
+            (delete-region (point-min) (+ url-http-end-of-headers 1)))
+        (if sync
+            (progn
+              (goto-char (point-min))
+              (if-let* ((attrs (condition-case nil
+                                   (funcall parser)
+                                 (error (funcall error)))))
+                          (setf response-data (plist-put response-data :data (funcall callback attrs))))))))
+        response-data))
+
 (cl-defun consult-web--request-error-handler (&rest args &key symbol-status error-thrown &allow-other-keys)
   "Handles errors for request backend."
   (message "consult-web: <request>  %s - %s" symbol-status error-thrown))
@@ -680,11 +760,15 @@ Refer to `request' documents for details."
 
 (defun consult-web--default-url-parse-buffer ()
 ""
-(goto-char (or url-http-end-of-headers (point-min)))
-(json-parse-buffer :object-type 'hash-table :array-type 'list :false-object :false :null-object :null))
+(let ((end-of-headers (if (and (bound-and-true-p url-http-end-of-headers)
+                               (number-or-marker-p url-http-end-of-headers))
+                          url-http-end-of-headers
+                        (point-min))))
+(goto-char end-of-headers)
+(json-parse-buffer :object-type 'hash-table :array-type 'list :false-object :false :null-object :null)))
 
-(cl-defun consult-web--fetch-url-async (url backend &rest args &key type params headers data parser callback error encoding timeout &allow-other-keys)
-"Retrieves URL synchronously.
+(cl-defun consult-web--fetch-url (url backend &rest args &key type params headers data parser callback error encoding timeout sync &allow-other-keys)
+  "Retrieves URL synchronously.
 
 Passes all the arguments to `consult-web--url-retrieve-synchronously' and in trun to `url-retrieve' fetches the results.
 
@@ -699,37 +783,72 @@ ERROR is a function that handles errors
 ENCODING is the encoding used for the request (e.g. 'utf-8)
 TIMEOUT is the time in seconds for timing out the request
 "
-    (cond
-     ((eq backend 'plz)
+  (cond
+   ((eq backend 'plz)
+    (if sync
+        (funcall callback (funcall #'plz (or type 'get) (consult-web--make-url-string url params)
+                                   :headers headers
+                                   :as parser
+                                   :then 'sync
+                                   :else (or error #'consult-web--plz-error-handler)
+                                   :timeout (or timeout consult-web-default-timeout)))
       (funcall #'plz (or type 'get) (consult-web--make-url-string url params)
                :headers headers
                :as parser
                :then callback
                :else (or error #'consult-web--plz-error-handler)
-               :timeout (or timeout consult-web-default-timeout)))
-     ((eq backend 'url)
-      (funcall #'consult-web-url-retrieve-async url
+               :timeout (or timeout consult-web-default-timeout))))
+   ((eq backend 'url)
+    (if sync
+        (consult-web--url-response-body
+         (funcall #'consult-web-url-retrieve url
+                  :sync sync
+                  :type (or type "GET")
+                  :params params
+                  :headers headers
+                  :parser parser
+                  :data data
+                  :error (or error #'consult-web--url-retrieve-error-handler)
+                  :callback (or callback #'identity)
+                  :encoding (or encoding 'utf-8)
+                  :timeout (or timeout consult-web-default-timeout)))
+      (funcall #'consult-web-url-retrieve url
+               :sync sync
                :type (or type "GET")
                :params params
                :headers headers
                :parser parser
                :data data
                :error (or error #'consult-web--url-retrieve-error-handler)
-               :callback callback
-               :encoding encoding
-               :timeout (or timeout consult-web-default-timeout)))
-     ((eq backend 'request)
+               :callback (or callback #'identity)
+               :encoding (or encoding 'utf-8)
+               :timeout (or timeout consult-web-default-timeout))))
+   ((eq backend 'request)
+    (if sync
+        (funcall callback
+                 (request-response-data
+                  (funcall #'request url
+                           :sync sync
+                           :params params
+                           :headers headers
+                           :parser parser
+                           :data data
+                           :error (or error #'consult-web--request-error-handler)
+                           :encoding (or encoding 'utf-8)
+                           :timeout (or timeout consult-web-default-timeout)
+                           )))
       (funcall #'request url
                :params params
                :headers headers
                :parser parser
                :data data
                :error (or error #'consult-web--request-error-handler)
-               :encoding encoding
+               :encoding (or encoding 'utf-8)
                :timeout (or timeout consult-web-default-timeout)
                :complete (cl-function (lambda (&key data &allow-other-keys)
-                                        (funcall callback data)))
-                                     ))))
+                                        (funcall (or callback #'identity) data)))
+               ))
+    )))
 
 (defun consult-web-dynamic--split-thingatpt (thing &optional split-initial)
   "Return THING at point.
@@ -958,7 +1077,6 @@ The preview and retrun actions are retrieve from `consult-web-sources-alist'."
                 ('preview
                  (if preview (funcall preview cand) (consult-web--default-url-preview cand)))
                 ('return
-                 (print cand)
                  (if return (funcall return cand) cand)))
               ))))))
 
@@ -1254,6 +1372,7 @@ POS and CATEGORY are the group ID and category for these items."
                                         items cat idx face)))
                       (funcall async 'flush)
                       (funcall async (apply #'append (append candidates nil)))
+                      (funcall async 'refresh)
                       )
                      ((< (cdr (func-arity items)) 2)
                       (setq items (funcall items input))
@@ -1262,6 +1381,7 @@ POS and CATEGORY are the group ID and category for these items."
                                         items cat idx face)))
                       (funcall async 'flush)
                       (funcall async (apply #'append (append candidates nil)))
+                      (funcall async 'refresh)
                       )
                      ((< (cdr (func-arity items)) 3)
                       (if input (funcall items input      ; async source, refresh in callback
@@ -1271,6 +1391,7 @@ POS and CATEGORY are the group ID and category for these items."
                                          (consult-web--multi-propertize response-items cat pos face))
                                    (funcall async 'flush)
                                    (funcall async (apply #'append (append candidates nil)))
+                                   (funcall async 'refresh)
                                    ))))))
                     ))
               (t
@@ -1287,7 +1408,7 @@ ASYNC is the sink.
 FUN computes the candidates given the input.
 DEBOUNCE is the time after which an interrupted computation
 should be restarted."
-  (setq debounce (or debounce consult-async-input-debounce))
+  (setq debounce (or debounce consult-web-dynamic-input-debounce))
   (setq async (consult--async-indicator async))
   (let* ((request) (current) (timer)
          (candidates (make-vector (length sources) nil))
@@ -1312,7 +1433,8 @@ should be restarted."
                        (setq candidates response)
                        (if (or (equal response 'nil) (equal response [nil]))
                            (funcall async 'flush)
-                         (funcall async 'nil))
+                         (funcall async 'nil)
+                         )
                        (setq state 'finished
                          current request)
                      ))
@@ -1325,7 +1447,8 @@ should be restarted."
          (funcall cancel)
          (if (or (equal action "") (equal action current))
                (funcall async 'indicator 'finished)
-           (funcall start action)))
+           (funcall start action)
+           ))
         ('destroy
          (funcall cancel)
          (funcall async 'destroy))
@@ -1422,16 +1545,18 @@ string   Update with the current user input string.  Return nil."
                (cl-incf idx)))))
         (_ (funcall async action))))))
 
+(defun consult-web--multi-dynamic-collection (sources)
+(thread-first
+  (consult--async-sink)
+  (consult-web--multi-dynamic-compute sources)
+  (consult--async-throttle)
+  (consult--async-split)))
+
 (defun consult-web--multi-dynamic (sources &rest options)
   (let* ((sources (consult--multi-enabled-sources sources))
          (selected
           (apply #'consult--read
-                 (consult--async-split
-                  (consult--async-throttle
-                   (consult-web--multi-dynamic-compute
-                    (consult--async-refresh-timer
-                    (consult--async-sink))
-                    sources)))
+                 (consult-web--multi-dynamic-collection sources)
                  (append
                   options
                   (list
@@ -1514,7 +1639,8 @@ instead."
                     (consult-web--lookup-function))
           :group ,(or group #'consult-web--group-function)
           :preview-key ,(and consult-web-show-preview (or preview-key consult-web-preview-key))
-          :enabled ,(or enabled t)
+          ,(if enabled ':enabled)
+          ,(if enabled enabled)
           :sort ,sort
           ))
 
