@@ -1442,7 +1442,6 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
                   (cond
                    ((< (cdr (func-arity items)) 1)
                     (setq items (funcall items))
-                    (setq items (mapcar (lambda (item) (or (car-safe item) item)) items))
                     (aset candidates idx
                           (and items (consult-web--multi-propertize
                                       items cat idx face))))
@@ -1455,7 +1454,7 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
                     (if input (funcall items input      ; async source, refresh in callback
                                        (lambda (response-items)
                                          (if response-items
-                                             (setq current
+                                            (setq current
                                                    (and response-items (consult-web--multi-propertize
                                                                         response-items cat idx face)))
                                            (setq current t))
@@ -1465,10 +1464,9 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
                           (step 0.05))
                       (while (and (< count max) (not current))
                         (+ count step)
-                        (if (< count max)
-                            (sit-for step)
-                          (message "consult-web: Hmmm! %s took longer than expected." (plist-get src :name))
-                          ))
+                        (if (>= count max)
+                             (message "consult-web: Hmmm! %s took longer than expected." (plist-get src :name))
+                           (sit-for step)))
                       (aset candidates idx current)))
                    )))
             ('error
@@ -1478,8 +1476,8 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
              nil)
             )))
       (cl-incf idx)
-      (setq current nil)
-      (apply #'append (append candidates nil)))))
+      (setq current nil))
+      (apply #'append (append candidates nil))))
 #+end_src
 **** consult-web--multi-static
 #+begin_src emacs-lisp
@@ -2003,35 +2001,39 @@ instead."
 *** make a static interactive command
 #+begin_src emacs-lisp
 
-(defun consult-web--call-static-command (input no-callback args request format face state source-name category lookup selection-history-var annotate preview-key on-callback sort)
+(defun consult-web--call-static-command (input no-callback args request format face state source-name category lookup selection-history-var annotate preview-key sort)
   "Internal function to make static `consult--read' command.
 
 Do not use this function directly, use `consult-web-define-source' macro
 instead."
-  (let* ((input (or input
-                    (and consult-web-default-autosuggest-command (funcall-interactively consult-web-default-autosuggest-command))
-                    (consult-web--read-search-string)))
-         (consult-async-input-throttle consult-web-dynamic-input-throttle)
+  (let* ((consult-async-input-throttle consult-web-dynamic-input-throttle)
          (consult-async-input-debounce consult-web-dynamic-input-debounce)
          (consult-async-refresh-delay consult-web-dynamic-refresh-delay)
+         (input (or input
+                    (and consult-web-default-autosuggest-command (funcall-interactively consult-web-default-autosuggest-command))
+                    (consult-web--read-search-string)))
+
+         (prompt (concat "[" (propertize (format "%s" (consult-web--func-name source-name)) 'face 'consult-web-prompt-face) "]" " Search: "))
          (selected (consult-web--multi-static (list (consult-web--source-name source-name))
-                                      :prompt (concat "[" (propertize (format "%s" (consult-web--func-name source-name)) 'face 'consult-web-prompt-face) "]" " Search: ")
-                                      :initial (consult--async-split-initial input)))
+                                              input
+                                              :prompt prompt
+                                              :sort sort
+                                              :history selection-history-var))
          (selected (cond
-                    ((consp selected) (car selected))
+                    ((consp selected) (car-safe selected))
                     (t selected)))
          (source (get-text-property 0 :source selected))
          )
     (unless no-callback
-        (if source
-            (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-callback) selected)))
+      (if source
+          (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-callback) selected)))
     selected)
   )
 
 #+end_src
 *** make a dynamic interactive command
 #+begin_src emacs-lisp
-(defun consult-web--call-dynamic-command (initial no-callback args source-name request category face lookup search-history-var selection-history-var preview-key)
+(defun consult-web--call-dynamic-command (initial no-callback args source-name request category face lookup search-history-var selection-history-var preview-key sort)
   "Internal function to make dynamic `consult--read' command.
 
 Do not use this function directly, use `consult-web-define-source' macro
@@ -2044,6 +2046,7 @@ Do not use this function directly, use `consult-web-define-source' macro
                                       :prompt prompt
                                       :history '(:input search-history-var)
                                       :initial (consult--async-split-initial initial)
+                                      :sort sort
                                       ))
          (selected (cond
                     ((consp selected) (car selected))
@@ -2193,7 +2196,7 @@ variable that this macro creates for %s=SOURCE-NAME.
        (defun ,(consult-web--func-name source-name nil "-static") (&optional input no-callback &rest args)
          ,(or docstring (consult-web--func-generate-docstring source-name))
          (interactive "P")
-         (consult-web--call-static-command input no-callback args ,request ,format ,face ,state ,source-name ,category ,lookup ,selection-history ,annotate ,preview-key ,on-callback ,sort)
+         (consult-web--call-static-command input no-callback args ,request ,format ,face ,state ,source-name ,category ,lookup ,selection-history ,annotate ,preview-key ,sort)
          ))
 
      ;; make a dynamic interactive command consult-web-dynamic-%s (%s=source-name)
@@ -2201,7 +2204,7 @@ variable that this macro creates for %s=SOURCE-NAME.
          (defun ,(consult-web--func-name source-name) (&optional initial no-callback &rest args)
            ,(or docstring (consult-web--func-generate-docstring source-name t))
            (interactive "P")
-           (consult-web--call-dynamic-command initial no-callback args ,source-name ,request ,category ,face ,lookup ,search-history ,selection-history ,preview-key)
+           (consult-web--call-dynamic-command initial no-callback args ,source-name ,request ,category ,face ,lookup ,search-history ,selection-history ,preview-key ,sort)
            ))
 
      ;; add source to consult-web-sources-alist
