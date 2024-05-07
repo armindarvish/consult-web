@@ -29,13 +29,19 @@ See URL `https://brave.com/search/api/' for more info"
                  (function :tag "Custom Function")))
 
 
-(defun consult-web--brave-fetch-results (input callback)
+(cl-defun consult-web--brave-fetch-results (input &rest args &key callback &allow-other-keys)
   ""
   (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
                (opts (car-safe opts))
-               (count (or (plist-get opts :count) consult-web-default-count))
+               (count (plist-get opts :count))
+               (page (plist-get opts :page))
+               (count (or (and (integerp count) count)
+                          (and count (string-to-number (format "%s" count)))
+                          consult-web-default-count))
+               (page (or (and (integerp page) page)
+                         (and page (string-to-number (format "%s" page)))
+                         consult-web-default-page))
                (count (min (max count 1) 20))
-               (page (or (plist-get opts :page) consult-web-default-page))
                (params `(("q" . ,(url-hexify-string query))
                          ("count" . ,(format "%s" count))
                          ("page" . ,(format "%s" page))))
@@ -86,6 +92,7 @@ See URL `https://brave.com/search/api/' for more info"
 
 (consult-web-define-source "Brave"
                            :narrow-char ?b
+                           :type 'async
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--brave-fetch-results
                            :preview-key consult-web-preview-key
@@ -96,6 +103,7 @@ See URL `https://brave.com/search/api/' for more info"
                            :sort t
                            :dynamic 'both
                            :annotate nil
+                           :type 'async
                            )
 
 ;;; provide `consult-web-brave' module

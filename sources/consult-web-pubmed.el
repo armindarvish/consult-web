@@ -29,7 +29,7 @@ See URL `https://www.ncbi.nlm.nih.gov/books/NBK25501/' for more info"
 (defvar  consult-web-pubmed-esearch-api-url "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi")
 
 
-(defun consult-web--pubmed-esearch-fetch-results (input &rest args &key db &allow-other-keys)
+(cl-defun consult-web--pubmed-esearch-fetch-results (input &rest args &key db &allow-other-keys)
   "Fetches “esearch” results for INPUT from PubMed Entrez Utilities service.
 
 COUNT is passed as retmax in query parameters.
@@ -80,7 +80,7 @@ for more info."
 
 (defvar consult-web-pubmed-esummary-api-url "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi")
 
-(cl-defun consult-web--pubmed-esummary-fetch-results (input callback &rest args &key webenv qk db &allow-other-keys)
+(cl-defun consult-web--pubmed-esummary-fetch-results (input &rest args &key callback webenv qk db &allow-other-keys)
   "Fetches “esearch” results for INPUT from PubMed Entrez Utilities service.
 
 COUNT is passed as retmax in query parameters.
@@ -191,7 +191,7 @@ TABLE is a hashtable from `consult-web--pubmed-fetch-results'."
           (setq str (consult-web--highlight-match match-str str t)))))
     str))
 
-(defun consult-web--pubmed-fetch-results (input callback)
+(cl-defun consult-web--pubmed-fetch-results (input &rest args &key callback &allow-other-keys)
   "Fetches results for INPUT from PubMed using Entrez Utilities
 service.
 
@@ -201,12 +201,13 @@ DATABASE is passed as DB to `consult-web--pubmed-esearch-fetch-results' and `con
 (let* ((esearch (consult-web--pubmed-esearch-fetch-results input))
        (webenv (plist-get esearch :webenv))
        (qk (plist-get esearch :qk)))
-  (consult-web--pubmed-esummary-fetch-results input callback :webenv webenv :qk qk)
+  (consult-web--pubmed-esummary-fetch-results input :callback callback :webenv webenv :qk qk)
 ))
 
 
 (consult-web-define-source "PubMed"
                            :narrow-char ?p
+                           :type 'async
                            :face 'consult-web-scholar-source-face
                            :request #'consult-web--pubmed-fetch-results
                            :preview-key consult-web-preview-key

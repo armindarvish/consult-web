@@ -20,12 +20,18 @@
 (defvar consult-web-wikipedia-url "https://wikipedia.org/")
 (defvar consult-web-wikipedia-api-url "https://wikipedia.org/w/api.php")
 
-(defun consult-web--wikipedia-fetch-results (input callback)
+(cl-defun consult-web--wikipedia-fetch-results (input &rest args &key callback &allow-other-keys)
   ""
   (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
                (opts (car-safe opts))
-               (count (or (plist-get opts :count) consult-web-default-count))
-               (page (or (plist-get opts :page) consult-web-default-page))
+               (count (plist-get opts :count))
+               (page (plist-get opts :page))
+               (count (or (and (integerp count) count)
+                          (and count (string-to-number (format "%s" count)))
+                          consult-web-default-count))
+               (page (or (and (integerp page) page)
+                         (and page (string-to-number (format "%s" page)))
+                         consult-web-default-page))
                (params `(("action" . "query")
                  ("format" . "json")
                  ("list" . "search")
@@ -81,6 +87,7 @@
 
 (consult-web-define-source "Wikipedia"
                            :narrow-char ?w
+                           :type 'async
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--wikipedia-fetch-results
                            :preview-key consult-web-preview-key
@@ -89,6 +96,7 @@
                            :enabled (lambda () "true")
                            :group #'consult-web--group-function
                            :sort t
+                           :type 'async
                            :dynamic 'both
                             )
 

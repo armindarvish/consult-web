@@ -74,7 +74,7 @@ See URL `https://dev.elsevier.com/documentation/SCOPUSSearchAPI.wadl' for more i
   :type '(choice (const :tag "Scopus API Key" string)
                  (function :tag "Custom Function")))
 
-(defun consult-web--scopus-fetch-results (input callback)
+(cl-defun consult-web--scopus-fetch-results (input &rest args &key callback &allow-other-keys)
   "Retrieve search results from SCOPUS for INPUT.
 "
   (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
@@ -144,6 +144,7 @@ See URL `https://dev.elsevier.com/documentation/SCOPUSSearchAPI.wadl' for more i
 (consult-web-define-source "Scopus"
                            :narrow-char ?s
                            :face 'consult-web-scholar-source-face
+                           :type 'async
                            :request #'consult-web--scopus-fetch-results
                            :preview-key consult-web-preview-key
                            :on-preview #'consult-web--scopus-preview

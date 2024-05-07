@@ -40,7 +40,7 @@
                                    result)))))))
 
 
-(defun consult-web--doiorg-fetch-results (input callback)
+(cl-defun consult-web--doiorg-fetch-results (input &rest args &key callback &allow-other-keys)
   "Fetch target url of DOI.
 "
   (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
@@ -86,6 +86,7 @@
 
 (consult-web-define-source "doiorg"
                            :narrow-char ?d
+                           :type 'async
                            :face 'link
                            :request #'consult-web--doiorg-fetch-results
                            :preview-key consult-web-preview-key
