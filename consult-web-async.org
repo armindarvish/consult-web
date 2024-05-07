@@ -221,7 +221,7 @@ or by using `consult-web--make-source-from-consult-source'."
 
 (defcustom consult-web-default-autosuggest-command nil
   "Which command should `consult-web' use for auto suggestion on search input?"
-  :type '(choice (function :tag "(default) use brave autosuggestion (i.e. `consult-web-dynamic-brave-autosuggest')" #'consult-web-dynamic-brave-autosuggest)
+  :type '(choice (function :tag "(default) use brave autosuggestion (i.e. `consult-web-brave-autosuggest')" #'consult-web-brave-autosuggest)
                  (function :tag "use google autosuggestion (i.e. `consult-web-dynamic-google-autosuggest')" #'consult-web-dynamic-google-autosuggest)
                  (function :tag "custom function")))
 
@@ -2473,7 +2473,7 @@ If SOURCES is nil, `consult-web-omni-sources' is used.
 If NO-CALLBACK is t, only the selected candidate is returned without
 any callback action."
   (interactive)
-  (let* ((input (or input  (consult-web-dynamic-brave-autosuggest input) ""))
+  (let* ((input (or input  (consult-web-brave-autosuggest input) ""))
          (consult-web-default-count 10)
          (sources (or sources (consult-web-omni-get-sources input)))
          (selected (consult--multi sources
