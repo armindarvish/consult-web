@@ -32,8 +32,9 @@ See URL `https://brave.com/search/api/' for more info"
 (defun consult-web--brave-fetch-results (input callback)
   ""
   (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
-               (args (car-safe otps))
+               (opts (car-safe opts))
                (count (or (plist-get opts :count) consult-web-default-count))
+               (count (min (max count 1) 20))
                (page (or (plist-get opts :page) consult-web-default-page))
                (params `(("q" . ,(url-hexify-string query))
                          ("count" . ,(format "%s" count))

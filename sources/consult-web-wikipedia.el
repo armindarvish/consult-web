@@ -75,7 +75,8 @@
                                              :query query)))
 
                              titles)))
-          (funcall callback annotated-results))))))
+          (funcall callback annotated-results)
+          annotated-results)))))
 
 
 (consult-web-define-source "Wikipedia"

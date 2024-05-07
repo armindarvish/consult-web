@@ -29,8 +29,9 @@ See URL `https://brave.com/search/api/' for more info"
 (defun consult-web--brave-autosuggest-fetch-results (input callback)
   ""
   (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
-               (args (car-safe opts))
+               (opts (car-safe opts))
                (count (or (plist-get opts :count) consult-web-default-count))
+               (count (min (max count 1) 20))
                (page (or (plist-get opts :page) consult-web-default-page))
                (params  `(("q" . ,query)
                           ("count" . ,(format "%s" count))
@@ -75,7 +76,8 @@ See URL `https://brave.com/search/api/' for more info"
                                                                          :query query)))
 
                                                          raw-results)))
-                                      (funcall callback annotated-results))))))
+                                      (funcall callback annotated-results)
+                                      annotated-results)))))
 
 (consult-web-define-source "Brave AutoSuggest"
                            :narrow-char ?B

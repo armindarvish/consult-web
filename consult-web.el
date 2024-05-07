@@ -268,6 +268,9 @@ You can use the convinient macro `consult-web-define-source'
 or the command `consult-web--make-source-from-consult-source'
 to add to this alist.")
 
+(defvar consult-web--hidden-buffers-list (list)
+  "List of currently open hidden buffers")
+
 (defvar consult-web--override-group-by nil
 "Override grouping in `consult-group' based on user input.
 
@@ -518,6 +521,7 @@ PARSER is a function that is executed in the url-retrieve response buffer and th
          (url-request-extra-headers headers)
          (url-request-data data)
          (url-with-params (consult-web--make-url-string url params))
+         (url-debug (if consult-web-log-level t nil))
          (response-data nil)
          (buffer (if timeout
                      (with-timeout
@@ -529,6 +533,7 @@ PARSER is a function that is executed in the url-retrieve response buffer and th
                  ))
 
     (when buffer
+      (add-to-list 'consult-web--hidden-buffers-list buffer)
       (with-current-buffer buffer
         (when consult-web-log-level
           (save-excursion
@@ -621,6 +626,7 @@ TIMEOUT is the time in seconds for timing out the request.
          (url-request-extra-headers headers)
          (url-request-data data)
          (url-with-params (consult-web--make-url-string url params))
+         (url-debug (if consult-web-log-level t nil))
          (response-data nil)
          (buffer (if timeout
                      (with-timeout
@@ -641,6 +647,7 @@ TIMEOUT is the time in seconds for timing out the request.
                  ))
 
     (when buffer
+      (add-to-list 'consult-web--hidden-buffers-list buffer)
       (with-current-buffer buffer
         (when consult-web-log-level
           (save-excursion
@@ -684,6 +691,7 @@ TIMEOUT is the time in seconds for timing out the request.
          (url-request-extra-headers headers)
          (url-request-data data)
          (url-with-params (consult-web--make-url-string url params))
+         (url-debug (if consult-web-log-level t nil))
          (response-data nil)
          (buffer (if timeout
                      (with-timeout
@@ -706,6 +714,7 @@ TIMEOUT is the time in seconds for timing out the request.
                                                                (error (funcall error)))))
                                                  (funcall callback attrs))) nil 'silent)))))
     (when buffer
+      (add-to-list 'consult-web--hidden-buffers-list buffer)
       (with-current-buffer buffer
         (when consult-web-log-level
           (save-excursion
@@ -849,6 +858,32 @@ TIMEOUT is the time in seconds for timing out the request
                                         (funcall (or callback #'identity) data)))
                ))
     )))
+
+(defun consult-web--kill-hidden-buffers ()
+"Kill all open preview buffers stored in
+`consult-gh--preview-buffers-list'.
+
+It asks for confirmation if the buffer is modified
+and removes the buffers that are killed from the list."
+  (interactive)
+  (when consult-web--hidden-buffers-list
+    (mapcar (lambda (buff) (if (and (buffer-live-p buff) (not (get-buffer-process buff)))
+                             (kill-buffer buff))) consult-web--hidden-buffers-list)
+    )
+  (setq consult-web--hidden-buffers-list nil)
+)
+
+(defun consult-web--kill-dead-buffers ()
+"Kill all open preview buffers stored in `consult-gh--preview-buffers-list'.
+It asks for confirmation if the buffer is modified and removes the buffers that are killed from the list."
+  (interactive)
+  (when url-dead-buffer-list
+    (mapcar (lambda (buff) (if  (and (buffer-live-p buff) (not (get-buffer-process buff)))
+                             (kill-buffer buff))
+               ) url-dead-buffer-list)
+    )
+  (setq url-dead-buffer-list nil)
+)
 
 (defun consult-web-dynamic--split-thingatpt (thing &optional split-initial)
   "Return THING at point.
@@ -1073,7 +1108,11 @@ The preview and retrun actions are retrieve from `consult-web-sources-alist'."
             (if state
                 (funcall state action cand args)
               (pcase action
-                ('exit (funcall buffer-preview 'exit cand))
+                ('exit
+                 (unless consult-web-log-level
+                   (consult-web--kill-hidden-buffers)
+                   (consult-web--kill-dead-buffers))
+                 (funcall buffer-preview 'exit cand))
                 ('preview
                  (if preview (funcall preview cand) (consult-web--default-url-preview cand)))
                 ('return
@@ -1216,6 +1255,94 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
                    )
 )
 
+(defun consult-web--multi-candidates-static (sources &optional input)
+  "Return `consult--multi' candidates from SOURCES."
+  (let* ((candidates (make-vector (length sources) nil))
+         (current)
+         (idx 0))
+    (seq-doseq (src sources)
+      (let* ((face (and (plist-member src :face) `(face ,(plist-get src :face))))
+             (cat (plist-get src :category))
+             (items (plist-get src :items))
+             (narrow (plist-get src :narrow))
+             (type (or (car-safe narrow) narrow -1))
+             (err (if consult-web-log-level 'err nil))
+             )
+        (when (or (eq consult--narrow type)
+                  (not (or consult--narrow (plist-get src :hidden))))
+          (condition-case err
+              (progn
+                (when (functionp items)
+                  (cond
+                   ((< (cdr (func-arity items)) 1)
+                    (setq items (funcall items))
+                    (setq items (mapcar (lambda (item) (or (car-safe item) item)) items))
+                    (aset candidates idx
+                          (and items (consult-web--multi-propertize
+                                      items cat idx face))))
+                   ((< (cdr (func-arity items)) 2)
+                    (setq items (funcall items input))
+                    (aset candidates idx
+                          (and items (consult-web--multi-propertize
+                                      items cat idx face))))
+                   (t
+                    (if input (funcall items input      ; async source, refresh in callback
+                                       (lambda (response-items)
+                                         (if response-items
+                                             (setq current
+                                                   (and response-items (consult-web--multi-propertize
+                                                                        response-items cat idx face)))
+                                           (setq current t))
+                                         )))
+                    (let ((count 0)
+                          (max consult-web-default-timeout)
+                          (step 0.05))
+                      (while (and (< count max) (not current))
+                        (+ count step)
+                        (if (< count max)
+                            (sit-for step)
+                          (message "consult-web: Hmmm! %s took longer than expected." (plist-get src :name))
+                          ))
+                      (aset candidates idx current)))
+                   )))
+            ('error
+               (message (if consult-web-log-level
+                            (format "error in calling :items of %s source - %s" (plist-get src :name) (error-message-string err))
+                          (format "error in calling :items of %s source" (plist-get src :name))))
+             nil)
+            )))
+      (cl-incf idx)
+      (setq current nil)
+      (apply #'append (append candidates nil)))))
+
+(defun consult-web--multi-static (sources input &rest options)
+  (let* ((sources (consult--multi-enabled-sources sources))
+         (candidates (consult--slow-operation "Give me a few seconds. The internet is a big mess!" (consult-web--multi-candidates-static sources input)))
+         (selected
+          (apply #'consult--read
+                 candidates
+                 (append
+                  options
+                  (list
+                   :sort        t
+                   :history     'consult-web--selection-history
+                   :category    'multi-category
+                   :predicate   (apply-partially #'consult-web--multi-predicate sources)
+                   :annotate    (apply-partially #'consult-web--multi-annotate sources)
+                   :group       (apply-partially #'consult-web--multi-group sources)
+                   :lookup      (apply-partially #'consult-web--multi-lookup sources)
+                   :preview-key (consult--multi-preview-key sources)
+                   :narrow      (consult--multi-narrow sources)
+                   :state       (consult--multi-state sources))))))
+    (if (plist-member (cdr selected) :match)
+        (when-let (fun (plist-get (cdr selected) :new))
+          (funcall fun (car selected))
+          (plist-put (cdr selected) :match 'new))
+      (when-let (fun (plist-get (cdr selected) :action))
+        (funcall fun (car selected)))
+      (setq selected `(,(car selected) :match t ,@(cdr selected))))
+    selected))
+
 (defun consult-web--split-command (input &rest args)
   (pcase-let* ((`(,query . ,opts) (consult--command-split input))
                (remaining-opts (list))
@@ -1331,7 +1458,8 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
 POS and CATEGORY are the group ID and category for these items."
   (let ((annotated-items))
     (dolist (item response-items annotated-items)
-      (let ((cand (consult--tofu-append item pos)))
+      (if (consp item) (setq item (or (car-safe item) item)))
+      (let* ((cand (consult--tofu-append item pos)))
         ;; Preserve existing `multi-category' datum of the candidate.
         (if (get-text-property 0 'multi-category cand)
             (when face (add-text-properties 0 (length item) face cand))
@@ -1358,10 +1486,11 @@ POS and CATEGORY are the group ID and category for these items."
                (items (plist-get src :items))
                (narrow (plist-get src :narrow))
                (type (or (car-safe narrow) narrow -1))
+               (err (if consult-web-log-level 'err nil))
                (pos idx))
           (when (or (eq consult--narrow type)
                     (not (or consult--narrow (plist-get src :hidden))))
-            (condition-case nil
+            (condition-case err
                 (progn
                   (when (functionp items)
                     (cond
@@ -1372,7 +1501,7 @@ POS and CATEGORY are the group ID and category for these items."
                                         items cat idx face)))
                       (funcall async 'flush)
                       (funcall async (apply #'append (append candidates nil)))
-                      (funcall async 'refresh)
+                      ;; (funcall async 'refresh)
                       )
                      ((< (cdr (func-arity items)) 2)
                       (setq items (funcall items input))
@@ -1381,9 +1510,9 @@ POS and CATEGORY are the group ID and category for these items."
                                         items cat idx face)))
                       (funcall async 'flush)
                       (funcall async (apply #'append (append candidates nil)))
-                      (funcall async 'refresh)
+                      ;; (funcall async 'refresh)
                       )
-                     ((< (cdr (func-arity items)) 3)
+                     (t
                       (if input (funcall items input      ; async source, refresh in callback
                                (lambda (response-items)
                                  (when response-items
@@ -1394,13 +1523,14 @@ POS and CATEGORY are the group ID and category for these items."
                                    (funcall async 'refresh)
                                    ))))))
                     ))
-              (t
-               (message "calling :items in %s source produced error" src)
-               nil)
+              ('error
+               (message (if consult-web-log-level
+                            (format "error in calling :items of %s source - %s" (plist-get src :name) (error-message-string err))
+                          (format "error in calling :items of %s source" (plist-get src :name))))
+             nil)
               )))
         (cl-incf idx))
-      candidates)
-  )
+      candidates))
 
 (defun consult-web--multi-dynamic-compute (async sources &optional debounce)
   "Dynamic computation of candidates.
@@ -1655,8 +1785,8 @@ instead."
          (consult-async-input-throttle consult-web-dynamic-input-throttle)
          (consult-async-input-debounce consult-web-dynamic-input-debounce)
          (consult-async-refresh-delay consult-web-dynamic-refresh-delay)
-         (selected (consult-web--multi-dynamic (list (consult-web--source-name source-name))
-                                      :prompt (concat "[" (propertize (format "%s" (consult-web--func-name source-name)) 'face 'consult-web-prompt-face) "]" " Search:  ")
+         (selected (consult-web--multi-static (list (consult-web--source-name source-name))
+                                      :prompt (concat "[" (propertize (format "%s" (consult-web--func-name source-name)) 'face 'consult-web-prompt-face) "]" " Search: ")
                                       :initial (consult--async-split-initial input)))
          (selected (cond
                     ((consp selected) (car selected))
@@ -1677,7 +1807,7 @@ Do not use this function directly, use `consult-web-define-source' macro
   (let* ((consult-async-refresh-delay consult-web-dynamic-refresh-delay)
          (consult-async-input-throttle consult-web-dynamic-input-throttle)
          (consult-async-input-debounce consult-web-dynamic-input-debounce)
-         (prompt (concat "[" (propertize (format "%s" (consult-web--func-name source-name)) 'face 'consult-web-prompt-face) "]" " Search:  "))
+         (prompt (concat "[" (propertize (format "%s" (consult-web--func-name source-name)) 'face 'consult-web-prompt-face) "]" " Search: "))
          (selected (consult-web--multi-dynamic (list (consult-web--source-name source-name))
                                       :prompt prompt
                                       :history '(:input search-history-var)
@@ -1826,7 +1956,7 @@ variable that this macro creates for %s=SOURCE-NAME.
 
      ;; make a static interactive command consult-web-%s (%s=source-name)
      (unless (eq ,dynamic t)
-       (defun ,(consult-web--func-name source-name) (&optional input no-callback &rest args)
+       (defun ,(consult-web--func-name source-name nil "-static") (&optional input no-callback &rest args)
          ,(or docstring (consult-web--func-generate-docstring source-name))
          (interactive "P")
          (consult-web--call-static-command input no-callback args ,request ,format ,face ,state ,source-name ,category ,lookup ,selection-history ,annotate ,preview-key ,on-callback ,sort)
@@ -1834,7 +1964,7 @@ variable that this macro creates for %s=SOURCE-NAME.
 
      ;; make a dynamic interactive command consult-web-dynamic-%s (%s=source-name)
      (if ,dynamic
-         (defun ,(consult-web--func-name source-name "dynamic-") (&optional initial no-callback &rest args)
+         (defun ,(consult-web--func-name source-name) (&optional initial no-callback &rest args)
            ,(or docstring (consult-web--func-generate-docstring source-name t))
            (interactive "P")
            (consult-web--call-dynamic-command initial no-callback args ,source-name ,request ,category ,face ,lookup ,search-history ,selection-history ,preview-key)
