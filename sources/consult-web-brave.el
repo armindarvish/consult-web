@@ -103,7 +103,6 @@ See URL `https://brave.com/search/api/' for more info"
                            :sort t
                            :dynamic 'both
                            :annotate nil
-                           :type 'async
                            )
 
 ;;; provide `consult-web-brave' module
