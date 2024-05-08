@@ -18,12 +18,19 @@
 )
 
 (setq consult-web-sources--all-modules-list
-      (list 'consult-web-brave-autosuggest
+      (list 'consult-web-chatgpt
+            'consult-web-bing
+            'consult-web-brave-autosuggest
             'consult-web-brave
             'consult-web-doi
+            'consult-web-elfeed
+            'consult-web-google
+            'consult-web-google-autosuggest
+            'consult-web-gptel
             'consult-web-pubmed
             'consult-web-scopus
-            'consult-web-wikipedia))
+            'consult-web-wikipedia
+            'consult-web-youtube))
 
 (defun consult-web-sources--load-module (symbol)
 "Loads feature SYMBOL"

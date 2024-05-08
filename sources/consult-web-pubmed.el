@@ -161,8 +161,9 @@ for more info."
   "Returns a formatted string for candidates of `consult-web-pubmed'.
 
 TABLE is a hashtable from `consult-web--pubmed-fetch-results'."
-  (let* ((source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
-         (date (if (stringp date) (propertize date 'face 'consult-web-path-face) nil))
+  (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+         (source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
+         (date (if (stringp date) (propertize date 'face 'consult-web-date-face) nil))
          (journal (if (stringp journal) (propertize journal 'face 'consult-web-domain-face) nil))
          (authors (cond
                    ((and authors (listp authors))
@@ -173,12 +174,11 @@ TABLE is a hashtable from `consult-web--pubmed-fetch-results'."
          (authors (if (and authors (stringp authors)) (propertize authors 'face 'consult-web-source-face)))
          (doi (if (stringp doi) (propertize doi 'face 'link)))
          (match-str (if (stringp query) (consult--split-escaped query) nil))
-         (title-str (consult-web--set-string-width title (floor (* (frame-width) 0.5))))
+         (title-str (consult-web--set-string-width title (* frame-width-percent 5)))
          (face (or (plist-get (cdr (assoc source consult-web-sources-alist)) :face) 'consult-web-scholar-source-face))
          (title-str (propertize title-str 'face face))
-         (str (concat title-str "\t"
-                      (propertize " " 'display '(space :align-to center))
-                      (if journal (format "%s" journal))
+         (str (concat title-str
+                      (if journal (format "\t%s" journal))
                       (if date (format "\s\s%s" date))
                       (if authors (format "\s\s%s" authors))
                       (if source (concat "\t" source))))

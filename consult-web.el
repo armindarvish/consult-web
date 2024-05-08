@@ -313,6 +313,14 @@ This is used for defining narrow functions
   `((t :inherit 'font-lock-function-call-face))
 "The face for academic literature source types in minibuffer.")
 
+(defface consult-web-source-face
+  `((t :inherit 'font-lock-comment-face))
+"The face for source annotation in minibuffer.")
+
+(defface consult-web-date-face
+  `((t :inherit 'font-lock-string-face))
+"The face for academic literature source types in minibuffer.")
+
 (defface consult-web-domain-face
   `((t :inherit 'font-lock-variable-face))
 "The face for domain annotation in minibuffer.")
@@ -321,8 +329,8 @@ This is used for defining narrow functions
   `((t :inherit 'font-lock-warning-face))
 "The face for path annotation in minibuffer.")
 
-(defface consult-web-source-face
-  `((t :inherit 'font-lock-comment-face))
+(defface consult-web-snippet-face
+  `((t :inherit 'font-lock-doc-face))
 "The face for source annotation in minibuffer.")
 
 (defface consult-web-highlight-match-face
@@ -332,6 +340,21 @@ This is used for defining narrow functions
 (defface consult-web-preview-match-face
   `((t :inherit 'consult-preview-match))
   "Preview match face in `consult-web' preview buffers.")
+
+(defun consult-web-properties-to-plist (string &optional ignore-keys)
+"Returns a plist of the text properties of STRING.
+
+Ommits keys in IGNORE-KEYs."
+(let ((properties (text-properties-at 0 string))
+      (pl nil))
+  (cl-loop for k in properties
+           when (keywordp k)
+           collect (unless (member k ignore-keys) (push (list k (plist-get properties k)) pl)))
+  (apply #'append pl)))
+
+(defun consult-web-propertize-by-plist (item props)
+"Propertizes ITEM by PROPS plist"
+  (apply #'propertize item props))
 
 ;;; Bakcend Functions
 
@@ -347,12 +370,12 @@ If PREPEND is non-nil, it truncates or adds whitespace from
          (w (string-width string)))
     (when (< w width)
       (if prepend
-          (setq string (format "%s%s" (make-string (- width w) ?\s) (substring string)))
-        (setq string (format "%s%s" (substring string) (make-string (- width w) ?\s)))))
+          (setq string (format "%s%s" (consult-web-propertize-by-plist (make-string (- width w) ?\s) (text-properties-at 0 string)) (substring string)))
+        (setq string (format "%s%s" (substring string) (consult-web-propertize-by-plist (make-string (- width w) ?\s) (text-properties-at 0 (substring string -1)))))))
     (when (> w width)
       (if prepend
-          (setq string (format "...%s" (substring string (- w (- width 3)) w)))
-        (setq string (format "%s..." (substring string 0 (- width (+ w 3)))))))
+          (setq string (format "%s%s" (consult-web-propertize-by-plist "..." (text-properties-at 0 string)) (substring string (- w (- width 3)) w)))
+        (setq string (format "%s%s" (substring string 0 (- width (+ w 3))) (consult-web-propertize-by-plist "..." (text-properties-at 0 (substring string (- width (+ w 3)) )))))))
     string))
 
 (defun consult-web--justify-left (string prefix maxwidth)
@@ -440,21 +463,6 @@ Does not add keys for the key in IGNORE-KEYS list."
                                            (unless (member key ignore-keys)
                                              (format "&%s=%s" key value))))))
   (mapconcat #'identity list)))
-
-(defun consult-web-properties-to-plist (string &optional ignore-keys)
-"Returns a plist of the text properties of STRING.
-
-Ommits keys in IGNORE-KEYs."
-(let ((properties (text-properties-at 0 string))
-      (pl nil))
-  (cl-loop for k in properties
-           when (keywordp k)
-           collect (unless (member k ignore-keys) (push (list k (plist-get properties k)) pl)))
-  (apply #'append pl)))
-
-(defun consult-web-propertize-by-plist (item props)
-"Propertizes ITEM by PROPS plist"
-  (apply #'propertize item props))
 
 (defun consult-web-hashtable-to-plist (hashtable &optional ignore-keys)
 "Converts a HASHTABLE to a plist.
@@ -1293,33 +1301,36 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
                    ((eq async-type 'async)
                     (if input (funcall items input
                                        :callback (lambda (response-items)
-                                         (if response-items
-                                            (setq current
-                                                   (and response-items (consult-web--multi-propertize
-                                                                        response-items cat idx face)))
-                                           (setq current t)))
+                                                   (if response-items
+                                                       (setq current
+                                                             (and response-items (consult-web--multi-propertize
+                                                                                  response-items cat idx face)))
+                                                     (setq current t)))
                                        args))
                     (let ((count 0)
                           (max consult-web-default-timeout)
                           (step 0.05))
+
                       (while (and (< count max) (not current))
                         (+ count step)
                         (if (>= count max)
-                             (message "consult-web: Hmmm! %s took longer than expected." (plist-get src :name))
-                           (sit-for step)))
+                            (message "consult-web: Hmmm! %s took longer than expected." (plist-get src :name))
+                          (sit-for step)))
+
                       (aset candidates idx current)))
                    (t
                     (message "source %s needs a :type keyword. See the documentation for `consult-web-define-source'." name)
-                   ))))
+                    ))))
+            ('wrong-type-argument nil)
             ('error
-               (message (if consult-web-log-level
-                            (format "error in calling :items of %s source - %s" name (error-message-string err))
-                          (format "error in calling :items of %s source" name)))
+             (message (if consult-web-log-level
+                          (format "error in calling :items of %s source - %s" name (error-message-string err))
+                        (format "error in calling :items of %s source" name)))
              nil)
             )))
       (cl-incf idx)
       (setq current nil))
-      (apply #'append (append candidates nil))))
+    (apply #'append (append candidates nil))))
 
 (defun consult-web--multi-static (sources input args &rest options)
   (let* ((sources (consult--multi-enabled-sources sources))
@@ -1534,6 +1545,7 @@ POS and CATEGORY are the group ID and category for these items."
                     (message "source %s needs a :type keyword. See the documentation for `consult-web-define-source'." name
                    )))
                     ))
+              ('wrong-type-argument nil)
               ('error
                (message (if consult-web-log-level
                             (format "error in calling :items of %s source - %s" name (error-message-string err))

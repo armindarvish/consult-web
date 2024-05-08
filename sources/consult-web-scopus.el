@@ -21,7 +21,7 @@
 
 TABLE is a hashtable from `consult-web--scopus-fetch-results'."
   (let* ((source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
-         (date (if (stringp date) (propertize date 'face 'consult-web-path-face) nil))
+         (date (if (stringp date) (propertize date 'face 'consult-web-date-face) nil))
          (journal (if (stringp journal) (propertize journal 'face 'consult-web-domain-face) nil))
          (authors (cond
                    ((and authors (listp authors))

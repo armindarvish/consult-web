@@ -70,10 +70,7 @@ See URL `https://brave.com/search/api/' for more info"
                                                                   (path (and (stringp path)
                                                                              (propertize path 'face 'font-lock-warning-face)))
                                                                   (search-url nil)
-                                                                  (decorated (concat word "\t"
-                                                                                     (propertize " " 'display '(space :align-to center))
-
-                                                                                     )))
+                                                                  (decorated (propertize word 'face 'consult-web-default-face)))
                                                              (propertize decorated
                                                                          :source source
                                                                          :title word
@@ -98,7 +95,7 @@ See URL `https://brave.com/search/api/' for more info"
                            :selection-history t
                            :enabled (lambda () #'my:brave-autosuggest-key)
                            :sort t
-                           :dynamic 'both
+                           :dynamic t
                            )
 
 ;;; provide `consult-web-brave-autosuggest' module

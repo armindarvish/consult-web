@@ -341,6 +341,14 @@ This is used for defining narrow functions
   `((t :inherit 'font-lock-function-call-face))
 "The face for academic literature source types in minibuffer.")
 
+(defface consult-web-source-face
+  `((t :inherit 'font-lock-comment-face))
+"The face for source annotation in minibuffer.")
+
+(defface consult-web-date-face
+  `((t :inherit 'font-lock-string-face))
+"The face for academic literature source types in minibuffer.")
+
 (defface consult-web-domain-face
   `((t :inherit 'font-lock-variable-face))
 "The face for domain annotation in minibuffer.")
@@ -349,8 +357,8 @@ This is used for defining narrow functions
   `((t :inherit 'font-lock-warning-face))
 "The face for path annotation in minibuffer.")
 
-(defface consult-web-source-face
-  `((t :inherit 'font-lock-comment-face))
+(defface consult-web-snippet-face
+  `((t :inherit 'font-lock-doc-face))
 "The face for source annotation in minibuffer.")
 
 (defface consult-web-highlight-match-face
@@ -363,6 +371,27 @@ This is used for defining narrow functions
 #+end_src
 ** Define Backend Functions
 *** general utility
+**** properties to plist
+#+begin_src emacs-lisp
+
+(defun consult-web-properties-to-plist (string &optional ignore-keys)
+"Returns a plist of the text properties of STRING.
+
+Ommits keys in IGNORE-KEYs."
+(let ((properties (text-properties-at 0 string))
+      (pl nil))
+  (cl-loop for k in properties
+           when (keywordp k)
+           collect (unless (member k ignore-keys) (push (list k (plist-get properties k)) pl)))
+  (apply #'append pl)))
+#+end_src
+**** propertize with plist
+#+begin_src emacs-lisp
+(defun consult-web-propertize-by-plist (item props)
+"Propertizes ITEM by PROPS plist"
+  (apply #'propertize item props))
+#+end_src
+
 **** formatting strings
 ***** fix string length
 ****** set string width
@@ -381,12 +410,12 @@ If PREPEND is non-nil, it truncates or adds whitespace from
          (w (string-width string)))
     (when (< w width)
       (if prepend
-          (setq string (format "%s%s" (make-string (- width w) ?\s) (substring string)))
-        (setq string (format "%s%s" (substring string) (make-string (- width w) ?\s)))))
+          (setq string (format "%s%s" (consult-web-propertize-by-plist (make-string (- width w) ?\s) (text-properties-at 0 string)) (substring string)))
+        (setq string (format "%s%s" (substring string) (consult-web-propertize-by-plist (make-string (- width w) ?\s) (text-properties-at 0 (substring string -1)))))))
     (when (> w width)
       (if prepend
-          (setq string (format "...%s" (substring string (- w (- width 3)) w)))
-        (setq string (format "%s..." (substring string 0 (- width (+ w 3)))))))
+          (setq string (format "%s%s" (consult-web-propertize-by-plist "..." (text-properties-at 0 string)) (substring string (- w (- width 3)) w)))
+        (setq string (format "%s%s" (substring string 0 (- width (+ w 3))) (consult-web-propertize-by-plist "..." (text-properties-at 0 (substring string (- width (+ w 3)) )))))))
     string))
 #+end_src
 ****** justify left
@@ -490,27 +519,6 @@ Does not add keys for the key in IGNORE-KEYS list."
                                              (format "&%s=%s" key value))))))
   (mapconcat #'identity list)))
 #+end_src
-**** properties to plist
-#+begin_src emacs-lisp
-
-(defun consult-web-properties-to-plist (string &optional ignore-keys)
-"Returns a plist of the text properties of STRING.
-
-Ommits keys in IGNORE-KEYs."
-(let ((properties (text-properties-at 0 string))
-      (pl nil))
-  (cl-loop for k in properties
-           when (keywordp k)
-           collect (unless (member k ignore-keys) (push (list k (plist-get properties k)) pl)))
-  (apply #'append pl)))
-#+end_src
-**** propertize with plist
-#+begin_src emacs-lisp
-(defun consult-web-propertize-by-plist (item props)
-"Propertizes ITEM by PROPS plist"
-  (apply #'propertize item props))
-#+end_src
-
 **** hashtable-to-plist
 #+begin_src emacs-lisp
 
@@ -1461,33 +1469,36 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
                    ((eq async-type 'async)
                     (if input (funcall items input
                                        :callback (lambda (response-items)
-                                         (if response-items
-                                            (setq current
-                                                   (and response-items (consult-web--multi-propertize
-                                                                        response-items cat idx face)))
-                                           (setq current t)))
+                                                   (if response-items
+                                                       (setq current
+                                                             (and response-items (consult-web--multi-propertize
+                                                                                  response-items cat idx face)))
+                                                     (setq current t)))
                                        args))
                     (let ((count 0)
                           (max consult-web-default-timeout)
                           (step 0.05))
+
                       (while (and (< count max) (not current))
                         (+ count step)
                         (if (>= count max)
-                             (message "consult-web: Hmmm! %s took longer than expected." (plist-get src :name))
-                           (sit-for step)))
+                            (message "consult-web: Hmmm! %s took longer than expected." (plist-get src :name))
+                          (sit-for step)))
+
                       (aset candidates idx current)))
                    (t
                     (message "source %s needs a :type keyword. See the documentation for `consult-web-define-source'." name)
-                   ))))
+                    ))))
+            ('wrong-type-argument nil)
             ('error
-               (message (if consult-web-log-level
-                            (format "error in calling :items of %s source - %s" name (error-message-string err))
-                          (format "error in calling :items of %s source" name)))
+             (message (if consult-web-log-level
+                          (format "error in calling :items of %s source - %s" name (error-message-string err))
+                        (format "error in calling :items of %s source" name)))
              nil)
             )))
       (cl-incf idx)
       (setq current nil))
-      (apply #'append (append candidates nil))))
+    (apply #'append (append candidates nil))))
 #+end_src
 **** consult-web--multi-static
 #+begin_src emacs-lisp
@@ -1729,6 +1740,7 @@ POS and CATEGORY are the group ID and category for these items."
                     (message "source %s needs a :type keyword. See the documentation for `consult-web-define-source'." name
                    )))
                     ))
+              ('wrong-type-argument nil)
               ('error
                (message (if consult-web-log-level
                             (format "error in calling :items of %s source - %s" name (error-message-string err))
@@ -2775,12 +2787,19 @@ Gets the preview function from `consult-web-sources-alist'."
 **** define all source modules
 #+begin_src emacs-lisp
 (setq consult-web-sources--all-modules-list
-      (list 'consult-web-brave-autosuggest
+      (list 'consult-web-chatgpt
+            'consult-web-bing
+            'consult-web-brave-autosuggest
             'consult-web-brave
             'consult-web-doi
+            'consult-web-elfeed
+            'consult-web-google
+            'consult-web-google-autosuggest
+            'consult-web-gptel
             'consult-web-pubmed
             'consult-web-scopus
-            'consult-web-wikipedia))
+            'consult-web-wikipedia
+            'consult-web-youtube))
 #+end_src
 **** add individual or list of sources
 #+begin_src emacs-lisp
@@ -2991,24 +3010,26 @@ See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/i
 #+end_src
 **** format
 #+begin_src emacs-lisp
-(defun consult-web--bing-format-candidate (source query url search-url title)
-  "Returns a formatted string for candidates of `consult-web-scopus'.
-
-TABLE is a hashtable from `consult-web--scopus-fetch-results'."
-  (let* ((source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
-         (title (and (stringp title) (propertize title 'face 'consult-web-engine-source-face)))
+(defun consult-web--bing-format-candidate (source query url search-url title snippet)
+  "Returns a formatted string for candidates of `consult-web-bing'."
+  (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+         (source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
+         (match-str (if (stringp query) (consult--split-escaped query) nil))
+         (title-str (consult-web--set-string-width title (* 4 frame-width-percent)))
+         (title-str (propertize title-str 'face 'consult-web-engine-source-face))
+         (snippet (if (stringp snippet) (consult-web--set-string-width snippet (* 2 frame-width-percent))))
+         (snippet (and (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
          (urlobj (and url (url-generic-parse-url url)))
          (domain (and (url-p urlobj) (url-domain urlobj)))
-         (domain (and (stringp domain) (propertize domain 'face 'font-lock-variable-name-face)))
+         (domain (and (stringp domain) (propertize domain 'face 'consult-web-domain-face)))
          (path (and (url-p urlobj) (url-filename urlobj)))
-         (path (and (stringp path) (propertize path 'face 'font-lock-warning-face)))
-         (match-str (if (stringp query) (consult--split-escaped query) nil))
-         (title-str (consult-web--set-string-width title (floor (* (frame-width) 0.4))))
-         (title-str (propertize title-str 'face (or 'consult-web-scholar-source-face)))
-         (str (concat title "\t"
-                      (propertize " " 'display '(space :align-to center))
-                      (if domain domain)
-                      (if path path)
+         (path (and (stringp path) (propertize path 'face 'consult-web-path-face)))
+         (path-string (concat domain path))
+         (path-string (and (stringp path-string) (consult-web--set-string-width path-string (* 3 frame-width-percent))))
+         (str (concat title-str
+                      " "
+                      (if path-string path-string)
+                      (if snippet (concat "\s\s" snippet))
                       (if source (concat "\t" source)))))
     (if consult-web-highlight-matches
         (cond
@@ -3023,12 +3044,12 @@ TABLE is a hashtable from `consult-web--scopus-fetch-results'."
 (defvar consult-web-bing-search-api-url "https://api.bing.microsoft.com/v7.0/search")
 
 (defcustom consult-web-bing-search-api-key nil
-"Key for Bing (Microsoft Azure) search API
+  "Key for Bing (Microsoft Azure) search API
 
 See URL `https://www.microsoft.com/en-us/bing/apis/bing-web-search-api' and URL `https://learn.microsoft.com/en-us/bing/search-apis/bing-web-search/search-the-web' for details"
-:group 'consult-web
-:type '(choice (const :tag "API Key" string)
-               (function :tag "Custom Function")))
+  :group 'consult-web
+  :type '(choice (const :tag "API Key" string)
+                 (function :tag "Custom Function")))
 
 (cl-defun consult-web--bing-fetch-results (input &rest args &key callback &allow-other-keys)
   "Fetches search results for INPUT from Bing web search api.
@@ -3045,40 +3066,41 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
                (page (or (and (integerp page) page)
                          (and page (string-to-number (format "%s" page)))
                          consult-web-default-page))
-                (count (max count 1))
-         (page (* page count))
-         (params `(("q" . ,(replace-regexp-in-string " " "+" input))
-                   ("count" . ,(format "%s" count))
-                   ("offset" . ,(format "%s" page))))
-         (headers `(("Ocp-Apim-Subscription-Key" . ,(consult-web-expand-variable-function consult-web-bing-search-api-key)))))
+               (count (max count 1))
+               (page (* page count))
+               (params `(("q" . ,(replace-regexp-in-string " " "+" input))
+                         ("count" . ,(format "%s" count))
+                         ("offset" . ,(format "%s" page))))
+               (headers `(("Ocp-Apim-Subscription-Key" . ,(consult-web-expand-variable-function consult-web-bing-search-api-key)))))
     (consult-web--fetch-url consult-web-bing-search-api-url consult-web-http-retrieve-backend
-      :encoding 'utf-8
-      :params params
-      :headers headers
-      :parser #'consult-web--default-url-parse-buffer
-      :callback
-      (lambda (attrs)
-        (let* ((raw-results (map-nested-elt attrs '("webPages" "value")))
-                    (search-url (gethash "webSearchUrl" attrs))
-                    (annotated-results
-                     (mapcar (lambda (item)
-                               (let*
-                                   ((source "Bing")
-                                    (url (format "%s" (gethash "url" item)))
-                                    (title (gethash "name" item))
-                                    (snippet (gethash "snippet" item))
-                                    (decorated (consult-web--bing-format-candidate source query url search-url title)))
-                                 (propertize decorated
-                                             :source source
-                                             :title title
-                                             :url url
-                                             :search-url search-url
-                                             :query query)))
+                            :encoding 'utf-8
+                            :params params
+                            :headers headers
+                            :parser #'consult-web--default-url-parse-buffer
+                            :callback
+                            (lambda (attrs)
+                              (let* ((raw-results (map-nested-elt attrs '("webPages" "value")))
+                                     (search-url (gethash "webSearchUrl" attrs))
+                                     (annotated-results
+                                      (mapcar (lambda (item)
+                                                (let*
+                                                    ((source "Bing")
+                                                     (url (format "%s" (gethash "url" item)))
+                                                     (title (gethash "name" item))
+                                                     (snippet (gethash "snippet" item))
+                                                     (decorated (consult-web--bing-format-candidate source query url search-url title snippet)))
+                                                  (propertize decorated
+                                                              :source source
+                                                              :title title
+                                                              :url url
+                                                              :search-url search-url
+                                                              :query query
+                                                              :snippet snippet)))
 
-                             raw-results)))
-          (when annotated-results
-            (funcall callback annotated-results))
-          annotated-results)))))
+                                              raw-results)))
+                                (when annotated-results
+                                  (funcall callback annotated-results))
+                                annotated-results)))))
 
 (consult-web-define-source "Bing"
                            :narrow-char ?m
@@ -3312,10 +3334,7 @@ See URL `https://brave.com/search/api/' for more info"
                                                                   (path (and (stringp path)
                                                                              (propertize path 'face 'font-lock-warning-face)))
                                                                   (search-url nil)
-                                                                  (decorated (concat word "\t"
-                                                                                     (propertize " " 'display '(space :align-to center))
-
-                                                                                     )))
+                                                                  (decorated (propertize word 'face 'consult-web-default-face)))
                                                              (propertize decorated
                                                                          :source source
                                                                          :title word
@@ -3340,7 +3359,7 @@ See URL `https://brave.com/search/api/' for more info"
                            :selection-history t
                            :enabled (lambda () #'my:brave-autosuggest-key)
                            :sort t
-                           :dynamic 'both
+                           :dynamic t
                            )
 #+end_src
 **** provide and footer
@@ -3351,128 +3370,6 @@ See URL `https://brave.com/search/api/' for more info"
 
 (add-to-list 'consult-web-sources-modules-to-load 'consult-web-brave-autosuggest)
 ;;; consult-web-brave-autosuggest.el ends here
-#+end_src
-
-*** Wikipedia
-:PROPERTIES:
-:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-wikipedia.el
-:END:
-**** header
-#+begin_src emacs-lisp
-;;; consult-web-wikipedia.el --- Consulting Wikipedia -*- lexical-binding: t -*-
-
-;; Copyright (C) 2024 Armin Darvish
-
-;; Author: Armin Darvish
-;; Maintainer: Armin Darvish
-;; Created: 2024
-;; Version: 0.1
-;; Package-Requires: ((emacs "28.1") (consult "1.1"))
-;; Homepage: https://github.com/armindarvish/consult-web
-;; Keywords: convenience
-
-;;; Commentary:
-
-;;; Code:
-
-(require 'consult-web)
-#+end_src
-
-**** wikipedia
-#+begin_src emacs-lisp
-(defvar consult-web-wikipedia-search-url "https://www.wikipedia.org/search-redirect.php")
-(defvar consult-web-wikipedia-url "https://wikipedia.org/")
-(defvar consult-web-wikipedia-api-url "https://wikipedia.org/w/api.php")
-
-(cl-defun consult-web--wikipedia-fetch-results (input &rest args &key callback &allow-other-keys)
-  ""
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
-               (opts (car-safe opts))
-               (count (plist-get opts :count))
-               (page (plist-get opts :page))
-               (count (or (and (integerp count) count)
-                          (and count (string-to-number (format "%s" count)))
-                          consult-web-default-count))
-               (page (or (and (integerp page) page)
-                         (and page (string-to-number (format "%s" page)))
-                         consult-web-default-page))
-               (params `(("action" . "query")
-                 ("format" . "json")
-                 ("list" . "search")
-                 ("formatversion" . "2")
-                 ("prop" . "info")
-                 ("inprop" . "url")
-                 ("srwhat" . "text")
-                 ("srsearch" . ,(url-hexify-string query))
-                 ("srlimit" . ,(format "%s" count))
-                 ("sroffset" . ,(format "%s" page))))
-               (headers '(("User-Agent" . "Emacs:consult-web/0.1 (https://github.com/armindarvish/consult-web);"))))
-    (consult-web--fetch-url consult-web-wikipedia-api-url consult-web-http-retrieve-backend
-      :encoding 'utf-8
-      :params params
-      :headers headers
-      :parser #'consult-web--default-url-parse-buffer
-      :callback
-      (lambda (attrs)
-        (when-let* ((raw-results (map-nested-elt attrs '("query" "search")))
-                    (titles  (mapcar (lambda (item) (format "%s" (gethash "title" item))) raw-results))
-                    (annotated-results
-                     (mapcar (lambda (item)
-                               (let*
-                                   ((source "Wikipedia")
-                                    (url (concat consult-web-wikipedia-url "wiki/" (string-replace " " "_" item)))
-                                    (title (format "%s" item))
-                                    (title (and (stringp title)
-                                                (propertize title 'face 'consult-web-engine-source-face)))
-                                    (urlobj (and url (url-generic-parse-url url)))
-                                    (domain (and (url-p urlobj) (url-domain urlobj)))
-                                    (domain (and (stringp domain)
-                                                 (propertize domain 'face 'font-lock-variable-name-face)))
-                                    (path (and (url-p urlobj) (url-filename urlobj)))
-                                    (path (and (stringp path)
-                                               (propertize path 'face 'font-lock-warning-face)))
-                                    (search-url (concat  consult-web-wikipedia-search-url "?" "search=" query))
-
-                                    (decorated (concat title "\t"
-                                                       (propertize " " 'display '(space :align-to center))
-                                                       domain path " "
-                                                       )))
-                                 (propertize decorated
-                                             :source source
-                                             :title title
-                                             :url url
-                                             :search-url search-url
-                                             :query query)))
-
-                             titles)))
-          (funcall callback annotated-results)
-          annotated-results)))))
-
-
-(consult-web-define-source "Wikipedia"
-                           :narrow-char ?w
-                           :type 'async
-                           :face 'consult-web-engine-source-face
-                           :request #'consult-web--wikipedia-fetch-results
-                           :preview-key consult-web-preview-key
-                           :search-history 'consult-web--search-history
-                           :selection-history 'consult-web--selection-history
-                           :enabled (lambda () "true")
-                           :group #'consult-web--group-function
-                           :sort t
-                           :type 'async
-                           :dynamic 'both
-                            )
-#+end_src
-
-**** provide and footer
-#+begin_src emacs-lisp
-;;; provide `consult-web-wikipedia' module
-
-(provide 'consult-web-wikipedia)
-
-(add-to-list 'consult-web-sources-modules-to-load 'consult-web-wikipedia)
-;;; consult-web-wikipedia.el ends here
 #+end_src
 
 *** Doi.org
@@ -3639,6 +3536,11 @@ See URL `https://brave.com/search/api/' for more info"
   (let ((annotated-entries))
     (dolist (entry entries annotated-entries)
       (let* ((url (elfeed-entry-link entry))
+             (urlobj (if url (url-generic-parse-url url)))
+             (domain (if (url-p urlobj) (url-domain urlobj)))
+             (domain (if (stringp domain) (propertize domain 'face 'consult-web-domain-face)))
+             (path (if (url-p urlobj) (url-filename urlobj)))
+             (path (if (stringp path) (propertize path 'face 'consult-web-path-face)))
              (title (or (elfeed-entry-title entry) ""))
              (title-faces (elfeed-search--faces (elfeed-entry-tags entry)))
              (feed (elfeed-entry-feed entry))
@@ -3657,29 +3559,32 @@ See URL `https://brave.com/search/api/' for more info"
                                    elfeed-search-title-max-width)
                             :left))
              (match-str (if (stringp query) (consult--split-escaped (car (consult--command-split query))) nil))
-             (str (concat (propertize date 'face 'elfeed-search-date-face) " "
-                       (propertize title-column 'face title-faces 'kbd-help title)
-                       (when feed-title
-                         (concat (propertize feed-title 'face 'elfeed-search-feed-face) " "))
-                       (when tags (concat "(" tags-str ")")))))
+             (str (concat (propertize title-column 'face title-faces 'kbd-help title) " "
+                          (propertize date 'face 'elfeed-search-date-face)
+                          (when feed-title
+                            (concat " " (propertize feed-title 'face 'elfeed-search-feed-face)))
+                          (when tags (concat " " "(" tags-str ")"))
+                          (when domain (concat "\t" domain (when path path)))
+                          (concat "\t" (propertize "elfeed" 'face 'consult-web-source-face))
+                          )))
         (if consult-web-highlight-matches
-        (cond
-         ((listp match-str)
-          (mapcar (lambda (match) (setq str (consult-web--highlight-match match str t))) match-str))
-         ((stringp match-str)
-          (setq str (consult-web--highlight-match match-str str t)))))
+            (cond
+             ((listp match-str)
+              (mapcar (lambda (match) (setq str (consult-web--highlight-match match str t))) match-str))
+             ((stringp match-str)
+              (setq str (consult-web--highlight-match match-str str t)))))
         (push (propertize str
-               :source "elfeed"
-               :title title
-               :url url
-               :search-url nil
-               :query query
-               :entry entry
-               :tags tags
-               :date date
-               :id id
-               :feed feed
-               )
+                          :source "elfeed"
+                          :title title
+                          :url url
+                          :search-url nil
+                          :query query
+                          :entry entry
+                          :tags tags
+                          :date date
+                          :id id
+                          :feed feed
+                          )
               annotated-entries)))))
 #+end_src
 **** main
@@ -3766,6 +3671,284 @@ Uses `elfeed-show-entry'."
 (add-to-list 'consult-web-sources-modules-to-load 'consult-web-elfeed)
 ;;; consult-web-elfeed.el ends here
 #+end_src
+
+*** Google
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-google.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-google.el --- Consulting Google -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+#+end_src
+**** format
+#+begin_src emacs-lisp
+
+(defun consult-web-google-format-candidate (source query url search-url title snippet)
+  "Returns a formatted string for candidates of `consult-web-scopus'.
+
+TABLE is a hashtable from `consult-web--scopus-fetch-results'."
+  (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+         (source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
+         (match-str (if (stringp query) (consult--split-escaped query) nil))
+         (title-str (consult-web--set-string-width title (* 4 frame-width-percent)))
+         (title-str (propertize title-str 'face 'consult-web-engine-source-face))
+         (snippet (if (stringp snippet) (consult-web--set-string-width snippet (* 2 frame-width-percent))))
+         (snippet (and (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
+         (urlobj (and url (url-generic-parse-url url)))
+         (domain (and (url-p urlobj) (url-domain urlobj)))
+         (domain (and (stringp domain) (propertize domain 'face 'consult-web-domain-face)))
+         (path (and (url-p urlobj) (url-filename urlobj)))
+         (path (and (stringp path) (propertize path 'face 'consult-web-path-face)))
+         (path-string (concat domain path))
+         (path-string (and (stringp path-string) (consult-web--set-string-width path-string (* 3 frame-width-percent))))
+         (str (concat title-str
+                      " "
+                      (if path-string path-string)
+                      (if snippet (concat "\s\s" snippet))
+                      (if source (concat "\t" source)))))
+    (if consult-web-highlight-matches
+        (cond
+         ((listp match-str)
+          (mapcar (lambda (match) (setq str (consult-web--highlight-match match str t))) match-str))
+         ((stringp match-str)
+          (setq str (consult-web--highlight-match match-str str t)))))
+    str))
+#+end_src
+**** custom search api
+
+#+begin_src emacs-lisp
+(defvar consult-web-google-search-url "https://www.google.com/search")
+
+(defvar consult-web-google-customsearch-api-url "https://www.googleapis.com/customsearch/v1")
+
+(defcustom consult-web-google-customsearch-key nil
+  "Key for Google custom search API
+
+See URL `https://developers.google.com/custom-search/' and URL `https://developers.google.com/custom-search/v1/introduction' for details"
+  :group 'consult-web
+  :type '(choice (const :tag "API Key" string)
+                 (function :tag "Custom Function")))
+
+(defcustom consult-web-google-customsearch-cx nil
+  "CX for Google custom search API
+
+See URL `https://developers.google.com/custom-search/' and URL `https://developers.google.com/custom-search/v1/introduction' for details"
+  :group 'consult-web
+  :type '(choice (const :tag "CX String" string)
+                 (function :tag "Custom Function")))
+
+
+(cl-defun consult-web--google-fetch-results (input &rest args &key callback &allow-other-keys)
+  "Fetches search results for INPUT from “Google custom search” service.
+
+Refer to URL `https://programmablesearchengine.google.com/about/' and `https://developers.google.com/custom-search/' for more info.
+"
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+               (opts (car-safe opts))
+               (count (plist-get opts :count))
+               (page (plist-get opts :page))
+               (filter (plist-get opts :filter))
+               (count (or (and (integerp count) count)
+                          (and count (string-to-number (format "%s" count)))
+                          consult-web-default-count))
+               (page (or (and (integerp page) page)
+                         (and page (string-to-number (format "%s" page)))
+                         consult-web-default-page))
+               (filter (or (and (integerp filter) filter)
+                           (and filter (string-to-number (format "%s" filter)))
+                           1))
+               (filter (if (member filter '(0 1)) filter 1))
+               (count (min count 10))
+               (page (+ (* page count) 1))
+               (params `(("q" . ,(replace-regexp-in-string " " "+" input))
+                         ("key" . ,(consult-web-expand-variable-function consult-web-google-customsearch-key))
+                         ("cx" . ,(consult-web-expand-variable-function consult-web-google-customsearch-cx))
+                         ("gl" . "en")
+                         ("filter" . ,(format "%s" filter))
+                         ("num" . ,(format "%s" count))
+                         ("start" . ,(format "%s" page))))
+               (headers '(("Accept" . "application/json")
+                          ("Accept-Encoding" . "gzip")
+                          ("User-Agent" . "consult-web (gzip)"))))
+    (consult-web--fetch-url consult-web-google-customsearch-api-url consult-web-http-retrieve-backend
+                            :encoding 'utf-8
+                            :params params
+                            :headers headers
+                            :parser #'consult-web--default-url-parse-buffer
+                            :callback
+                            (lambda (attrs)
+                              (let* ((raw-results (gethash "items" attrs))
+                                     (annotated-results
+                                           (mapcar (lambda (item)
+                                                     (let*
+                                                         ((source "Google")
+                                                          (url (format "%s" (gethash "link" item)))
+                                                          (title (format "%s" (gethash "title" item)))
+                                                          (snippet (string-trim (format "%s" (gethash "snippet" item))))
+                                                          (search-url (consult-web--make-url-string consult-web-google-search-url params '("key" "cx" "gl")))
+
+                                                          (decorated (consult-web-google-format-candidate source query url search-url title snippet)))
+                                                       (propertize decorated
+                                                                   :source source
+                                                                   :title title
+                                                                   :url url
+                                                                   :search-url search-url
+                                                                   :query query
+                                                                   :snippet snippet)))
+
+                                                   raw-results)))
+                                (when annotated-results
+                                  (funcall callback annotated-results))
+                                annotated-results)))))
+
+
+(consult-web-define-source "Google"
+                           :narrow-char ?g
+                           :type 'async
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--google-fetch-results
+                           :preview-key consult-web-preview-key
+                           :search-history 'consult-web--search-history
+                           :selection-history 'consult-web--selection-history
+                           :enabled (lambda () #'my:google-search-api-cx-and-key)
+                           :group #'consult-web--group-function
+                           :sort t
+                           :dynamic 'both
+                           :annotate nil
+                           )
+#+end_src
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-google' module
+
+(provide 'consult-web-google)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-google)
+;;; consult-web-google.el ends here
+#+end_src
+
+
+*** Google Autosuggest
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-google-autosuggest.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-google-autosuggest.el --- Consulting Google Autosuggest -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+#+end_src
+
+**** google autosuggest
+#+begin_src emacs-lisp
+(defvar consult-web-google-autosuggest-api-url "http://suggestqueries.google.com/complete/search")
+
+(cl-defun consult-web--google-autosuggest-fetch-results (input &rest args &key callback &allow-other-keys)
+  "Fetch search results for INPUT from Google Autosuggest.
+
+Uses `consult-web-google-autosuggest-api-url' as autosuggest api url."
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+               (opts (car-safe opts))
+               (count (plist-get opts :count))
+               (page (plist-get opts :page))
+               (count (or (and (integerp count) count)
+                          (and count (string-to-number (format "%s" count)))
+                          consult-web-default-count))
+               (page (or (and (integerp page) page)
+                         (and page (string-to-number (format "%s" page)))
+                         consult-web-default-count))
+               (params `(("q" . ,query)
+                         ("client" . "chrome")))
+               (headers `(("Accept" . "application/json"))))
+    (consult-web--fetch-url consult-web-google-autosuggest-api-url consult-web-http-retrieve-backend
+                            :params params
+                            :headers headers
+                            :parser #'consult-web--default-url-parse-buffer
+                            :callback
+                            (lambda (attrs)
+                              (when-let* ((raw-results (append (list (car-safe attrs)) (car-safe (cdr-safe attrs))))
+                                          (annotated-results
+                                           (mapcar (lambda (item)
+                                                     (let* ((source "Google AutoSuggest")
+                                                            (word item)
+                                                            (url                                  (concat "https://www.google.com/search?q="  (replace-regexp-in-string " " "+" word)))
+                                                            (urlobj (and url (url-generic-parse-url url)))
+                                                            (domain (and (url-p urlobj) (url-domain urlobj)))
+                                                            (domain (and (stringp domain)
+                                                                         (propertize domain 'face 'font-lock-variable-name-face)))
+                                                            (path (and (url-p urlobj) (url-filename urlobj)))
+                                                            (path (and (stringp path)
+                                                                       (propertize path 'face 'font-lock-warning-face)))
+                                                            (search-url nil)
+                                                            (decorated (propertize word 'face 'consult-web-default-face)))
+                                                       (propertize decorated
+                                                                   :source source
+                                                                   :title word
+                                                                   :url url
+                                                                   :search-url search-url
+                                                                   :query query)))
+
+                                                   raw-results)))
+                                (funcall callback annotated-results)
+                                annotated-results)))))
+
+(consult-web-define-source "Google AutoSuggest"
+                           :narrow-char ?G
+                           :type 'async
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--google-autosuggest-fetch-results
+                           :on-preview #'ignore
+                           :on-return #'identity
+                           :on-callback #'string-trim
+                           :search-history 'consult-web--search-history
+                           :selection-history t
+                           :group #'consult-web--group-function
+                           :enabled (lambda () #'my:brave-autosuggest-key)
+                           :sort t
+                           :dynamic t
+                           )
+#+end_src
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-google-autosuggest' module
+
+(provide 'consult-web-google-autosuggest)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-google-autosuggest)
+;;; consult-web-google-autosuggest.el ends here
+#+end_src
+
+
 *** gptel
 :PROPERTIES:
 :header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-gptel.el
@@ -4108,8 +4291,9 @@ for more info."
   "Returns a formatted string for candidates of `consult-web-pubmed'.
 
 TABLE is a hashtable from `consult-web--pubmed-fetch-results'."
-  (let* ((source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
-         (date (if (stringp date) (propertize date 'face 'consult-web-path-face) nil))
+  (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+         (source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
+         (date (if (stringp date) (propertize date 'face 'consult-web-date-face) nil))
          (journal (if (stringp journal) (propertize journal 'face 'consult-web-domain-face) nil))
          (authors (cond
                    ((and authors (listp authors))
@@ -4120,12 +4304,11 @@ TABLE is a hashtable from `consult-web--pubmed-fetch-results'."
          (authors (if (and authors (stringp authors)) (propertize authors 'face 'consult-web-source-face)))
          (doi (if (stringp doi) (propertize doi 'face 'link)))
          (match-str (if (stringp query) (consult--split-escaped query) nil))
-         (title-str (consult-web--set-string-width title (floor (* (frame-width) 0.5))))
+         (title-str (consult-web--set-string-width title (* frame-width-percent 5)))
          (face (or (plist-get (cdr (assoc source consult-web-sources-alist)) :face) 'consult-web-scholar-source-face))
          (title-str (propertize title-str 'face face))
-         (str (concat title-str "\t"
-                      (propertize " " 'display '(space :align-to center))
-                      (if journal (format "%s" journal))
+         (str (concat title-str
+                      (if journal (format "\t%s" journal))
                       (if date (format "\s\s%s" date))
                       (if authors (format "\s\s%s" authors))
                       (if source (concat "\t" source))))
@@ -4214,7 +4397,7 @@ DATABASE is passed as DB to `consult-web--pubmed-esearch-fetch-results' and `con
 
 TABLE is a hashtable from `consult-web--scopus-fetch-results'."
   (let* ((source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
-         (date (if (stringp date) (propertize date 'face 'consult-web-path-face) nil))
+         (date (if (stringp date) (propertize date 'face 'consult-web-date-face) nil))
          (journal (if (stringp journal) (propertize journal 'face 'consult-web-domain-face) nil))
          (authors (cond
                    ((and authors (listp authors))
@@ -4367,4 +4550,300 @@ See URL `https://dev.elsevier.com/documentation/SCOPUSSearchAPI.wadl' for more i
 
 (add-to-list 'consult-web-sources-modules-to-load 'consult-web-scopus)
 ;;; consult-web-scopus.el ends here
+#+end_src
+*** Wikipedia
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-wikipedia.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-wikipedia.el --- Consulting Wikipedia -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+#+end_src
+
+**** wikipedia
+#+begin_src emacs-lisp
+(defvar consult-web-wikipedia-search-url "https://www.wikipedia.org/search-redirect.php")
+(defvar consult-web-wikipedia-url "https://wikipedia.org/")
+(defvar consult-web-wikipedia-api-url "https://wikipedia.org/w/api.php")
+
+(cl-defun consult-web--wikipedia-fetch-results (input &rest args &key callback &allow-other-keys)
+  ""
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+               (opts (car-safe opts))
+               (count (plist-get opts :count))
+               (page (plist-get opts :page))
+               (count (or (and (integerp count) count)
+                          (and count (string-to-number (format "%s" count)))
+                          consult-web-default-count))
+               (page (or (and (integerp page) page)
+                         (and page (string-to-number (format "%s" page)))
+                         consult-web-default-page))
+               (params `(("action" . "query")
+                 ("format" . "json")
+                 ("list" . "search")
+                 ("formatversion" . "2")
+                 ("prop" . "info")
+                 ("inprop" . "url")
+                 ("srwhat" . "text")
+                 ("srsearch" . ,(url-hexify-string query))
+                 ("srlimit" . ,(format "%s" count))
+                 ("sroffset" . ,(format "%s" page))))
+               (headers '(("User-Agent" . "Emacs:consult-web/0.1 (https://github.com/armindarvish/consult-web);"))))
+    (consult-web--fetch-url consult-web-wikipedia-api-url consult-web-http-retrieve-backend
+      :encoding 'utf-8
+      :params params
+      :headers headers
+      :parser #'consult-web--default-url-parse-buffer
+      :callback
+      (lambda (attrs)
+        (when-let* ((raw-results (map-nested-elt attrs '("query" "search")))
+                    (titles  (mapcar (lambda (item) (format "%s" (gethash "title" item))) raw-results))
+                    (annotated-results
+                     (mapcar (lambda (item)
+                               (let*
+                                   ((source "Wikipedia")
+                                    (url (concat consult-web-wikipedia-url "wiki/" (string-replace " " "_" item)))
+                                    (title (format "%s" item))
+                                    (title (and (stringp title)
+                                                (propertize title 'face 'consult-web-engine-source-face)))
+                                    (urlobj (and url (url-generic-parse-url url)))
+                                    (domain (and (url-p urlobj) (url-domain urlobj)))
+                                    (domain (and (stringp domain)
+                                                 (propertize domain 'face 'font-lock-variable-name-face)))
+                                    (path (and (url-p urlobj) (url-filename urlobj)))
+                                    (path (and (stringp path)
+                                               (propertize path 'face 'font-lock-warning-face)))
+                                    (search-url (concat  consult-web-wikipedia-search-url "?" "search=" query))
+
+                                    (decorated (concat title "\t"
+                                                       (propertize " " 'display '(space :align-to center))
+                                                       domain path " "
+                                                       )))
+                                 (propertize decorated
+                                             :source source
+                                             :title title
+                                             :url url
+                                             :search-url search-url
+                                             :query query)))
+
+                             titles)))
+          (funcall callback annotated-results)
+          annotated-results)))))
+
+
+(consult-web-define-source "Wikipedia"
+                           :narrow-char ?w
+                           :type 'async
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--wikipedia-fetch-results
+                           :preview-key consult-web-preview-key
+                           :search-history 'consult-web--search-history
+                           :selection-history 'consult-web--selection-history
+                           :enabled (lambda () "true")
+                           :group #'consult-web--group-function
+                           :sort t
+                           :type 'async
+                           :dynamic 'both
+                            )
+#+end_src
+
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-wikipedia' module
+
+(provide 'consult-web-wikipedia)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-wikipedia)
+;;; consult-web-wikipedia.el ends here
+#+end_src
+*** YouTube
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-youtube.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-youtube.el --- Consulting YouTube -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+#+end_src
+**** format
+#+begin_src emacs-lisp
+(defun consult-web--youtube-format-candidate (source query url search-url title snippet channeltitle)
+"Formats a candidate for `consult-web-youtube' commands.
+"
+  (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+         (source (propertize source 'face 'consult-web-source-face))
+         (match-str (if (stringp query) (consult--split-escaped query) nil))
+         (urlobj (and url (url-generic-parse-url url)))
+         (domain (and (url-p urlobj) (url-domain urlobj)))
+         (domain (and (stringp domain) (propertize domain 'face 'consult-web-domain-face)))
+         (channeltitle (and (stringp channeltitle) (propertize channeltitle 'face 'consult-web-path-face)))
+         (snippet (if (stringp snippet) (consult-web--set-string-width snippet (* 2 frame-width-percent))))
+         (snippet (and (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
+         (title-str (consult-web--set-string-width title (* 6 frame-width-percent)))
+         (title-str (propertize title-str 'face 'consult-web-default-face))
+         (str (concat title-str
+                      (when domain (concat "\s" domain))
+                      (when channeltitle (concat " - " channeltitle))
+                      (when snippet (concat "\s\s" snippet))
+                      (concat "\t" source)))
+         )
+    (if consult-web-highlight-matches
+        (cond
+         ((listp match-str)
+          (mapcar (lambda (match) (setq str (consult-web--highlight-match match str t))) match-str))
+         ((stringp match-str)
+          (setq str (consult-web--highlight-match match-str str t)))))
+    str))
+#+end_src
+**** youtube
+#+begin_src emacs-lisp
+(defvar consult-web-youtube-watch-url "https://www.youtube.com/watch")
+
+(defvar consult-web-youtube-channel-url "https://www.youtube.com/channel/")
+
+(defvar consult-web-youtube-search-results-url "https://www.youtube.com/results")
+
+(defvar consult-web-youtube-search-api-url "https://www.googleapis.com/youtube/v3/search")
+
+(defcustom consult-web-youtube-search-key nil
+  "Key for “YouTube Data API”
+
+See URL `https://developers.google.com/youtube/v3/getting-started'
+for details"
+  :group 'consult-web
+  :type '(choice (const :tag "API Key" string)
+                 (function :tag "Custom Function")))
+
+(cl-defun consult-web--youtube-fetch-results (input &rest args &key callback &allow-other-keys)
+  "Fetches search results for INPUT from “YouTube Data API” service.
+"
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+               (opts (car-safe opts))
+               (count (plist-get opts :count))
+               (page (plist-get opts :page))
+               (def (plist-get opts :def))
+               (type (plist-get opts :type))
+               (vidtype (plist-get opts :vidtype))
+               (order (plist-get opts :order))
+               (count (or (and (integerp count) count)
+                    (and count (string-to-number (format "%s" count)))
+                    consult-web-default-count))
+         (page (or (and (integerp page) page)
+                   (and page (string-to-number (format "%s" page)))
+                   consult-web-default-count))
+               (def (if (and def (member (format "%s" def) '("any" "standard" "high"))) (format "%s" def) "any"))
+               (type (if (and type (member (format "%s" type) '("channel" "playlist" "video"))) (format "%s" type) "video"))
+               (vidtype (if (and vidtype (member (format "%s" vidtype) '("any" "episode" "movie"))) (format "%s" vidtype) "any"))
+               (count (min count 10))
+               (page (+ (* page count) 1))
+               (order  (if (and order (member (format "%s" order) '("date" "rating" "relevance" "title" "videoCount" "viewCount"))) (format "%s" order) "relevance"))
+               (params `(("q" . ,query)
+                         ("part" . "snippet")
+                         ("order" . ,order)
+                         ("type" . ,type)
+                         ("maxResults" . ,(format "%s" count))
+                         ("videoDefinition" . ,def)
+                         ("videoType" . ,vidtype)))
+               (headers `(("Accept" . "application/json")
+                          ("Accept-Encoding" . "gzip")
+                          ("User-Agent" . "consult-web (gzip)")
+                          ("X-Goog-Api-Key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key)))))
+    (consult-web--fetch-url consult-web-youtube-search-api-url consult-web-http-retrieve-backend
+                            :encoding 'utf-8
+                            :params params
+                            :headers headers
+                            :parser #'consult-web--default-url-parse-buffer
+                            :callback
+                            (lambda (attrs)
+                              (let* ((raw-results (gethash "items" attrs))
+                                     (annotated-results
+                                      (mapcar (lambda (item)
+                                                (let*
+                                                    ((source "YouTube")
+                                                     (videoid (gethash "videoId" (gethash "id" item)))
+                                                     (snippet (gethash "snippet" item))
+                                                     (channeltitle (gethash "channelTitle" snippet))
+                                                     (channelid (gethash "channelId" snippet))
+                                                     (title (gethash "title" snippet))
+                                                     (date (gethash "publishedAt" snippet))
+                                                     (date (format-time-string "%Y-%m-%d %R" (date-to-time date)))
+                                                     (url (cond
+                                                           (videoid (consult-web--make-url-string consult-web-youtube-watch-url `(("v" . ,videoid))))
+                                                           (channelid (concat consult-web-youtube-channel-url channelid))))
+                                                     (search-url (consult-web--make-url-string consult-web-youtube-search-results-url `(("search_query" . ,query))))
+                                                     (description (gethash "description" snippet))
+
+                                                     (decorated (consult-web--youtube-format-candidate source query url search-url title snippet channeltitle)))
+                                                (propertize decorated
+                                                            :source source
+                                                            :title title
+                                                            :url url
+                                                            :search-url search-url
+                                                            :query query
+                                                            :snippet description
+                                                            :videoid videoid
+                                                            :channeltitle channeltitle
+                                                            :channelid channelid)))
+
+                                      raw-results)))
+                              (when annotated-results
+                                (funcall callback annotated-results))
+                              annotated-results)))))
+
+(consult-web-define-source "YouTube"
+                           :narrow-char ?y
+                           :type 'async
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--youtube-fetch-results
+                           :format #'consult-web--youtube-format-candidate
+                           :preview-key consult-web-preview-key
+                           :search-history 'consult-web--search-history
+                           :selection-history 'consult-web--selection-history
+                           :enabled (lambda () #'my:google-search-api-cx-and-key)
+                           :group #'consult-web--group-function
+                           :sort t
+                           :dynamic 'both
+                           :annotate nil
+                           )
+
+#+end_src
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-youtube' module
+
+(provide 'consult-web-youtube)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-youtube)
+;;; consult-web-youtube.el ends here
 #+end_src

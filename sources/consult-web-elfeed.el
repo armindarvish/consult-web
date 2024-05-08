@@ -30,6 +30,11 @@
   (let ((annotated-entries))
     (dolist (entry entries annotated-entries)
       (let* ((url (elfeed-entry-link entry))
+             (urlobj (if url (url-generic-parse-url url)))
+             (domain (if (url-p urlobj) (url-domain urlobj)))
+             (domain (if (stringp domain) (propertize domain 'face 'consult-web-domain-face)))
+             (path (if (url-p urlobj) (url-filename urlobj)))
+             (path (if (stringp path) (propertize path 'face 'consult-web-path-face)))
              (title (or (elfeed-entry-title entry) ""))
              (title-faces (elfeed-search--faces (elfeed-entry-tags entry)))
              (feed (elfeed-entry-feed entry))
@@ -48,29 +53,32 @@
                                    elfeed-search-title-max-width)
                             :left))
              (match-str (if (stringp query) (consult--split-escaped (car (consult--command-split query))) nil))
-             (str (concat (propertize date 'face 'elfeed-search-date-face) " "
-                       (propertize title-column 'face title-faces 'kbd-help title)
-                       (when feed-title
-                         (concat (propertize feed-title 'face 'elfeed-search-feed-face) " "))
-                       (when tags (concat "(" tags-str ")")))))
+             (str (concat (propertize title-column 'face title-faces 'kbd-help title) " "
+                          (propertize date 'face 'elfeed-search-date-face)
+                          (when feed-title
+                            (concat " " (propertize feed-title 'face 'elfeed-search-feed-face)))
+                          (when tags (concat " " "(" tags-str ")"))
+                          (when domain (concat "\t" domain (when path path)))
+                          (concat "\t" (propertize "elfeed" 'face 'consult-web-source-face))
+                          )))
         (if consult-web-highlight-matches
-        (cond
-         ((listp match-str)
-          (mapcar (lambda (match) (setq str (consult-web--highlight-match match str t))) match-str))
-         ((stringp match-str)
-          (setq str (consult-web--highlight-match match-str str t)))))
+            (cond
+             ((listp match-str)
+              (mapcar (lambda (match) (setq str (consult-web--highlight-match match str t))) match-str))
+             ((stringp match-str)
+              (setq str (consult-web--highlight-match match-str str t)))))
         (push (propertize str
-               :source "elfeed"
-               :title title
-               :url url
-               :search-url nil
-               :query query
-               :entry entry
-               :tags tags
-               :date date
-               :id id
-               :feed feed
-               )
+                          :source "elfeed"
+                          :title title
+                          :url url
+                          :search-url nil
+                          :query query
+                          :entry entry
+                          :tags tags
+                          :date date
+                          :id id
+                          :feed feed
+                          )
               annotated-entries)))))
 
 (defun consult-web--elfeed-search-buffer ()
