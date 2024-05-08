@@ -41,23 +41,24 @@ metadata MODEL and BACKEND as text properties, so it can be send to
                (model (or (and model backend-struct (member model (cl-struct-slot-value (type-of backend-struct) 'models backend-struct)) model)
                           (and backend-struct (car (cl-struct-slot-value (type-of backend-struct) 'models backend-struct)))))
                (stream (or (and (plist-member opts :stream) (plist-get opts :stream)) gptel-stream))
-               (placeholder (concat (format "ask gptel: %s" (string-trim-right input))
-                                    " " (propertize " " 'display '(space :align-to center))
-                                    (propertize backend 'face 'font-lock-variable-name-face)
-                                    (propertize (format ":%s" model) 'face 'font-lock-warning-face)
-                                    (and stream (propertize " ~stream~ " 'face 'font-lock-comment-face))))
+               (backend (propertize backend 'face 'consult-web-domain-face))
+               (model (propertize model 'face 'consult-web-path-face))
+               (title-str (format "ask gptel: %s" (string-trim-right query)))
+               (title-str (propertize title-str 'face 'consult-web-ai-source-face))
+               (placeholder (concat title-str
+                                    (when backend (concat "\t" backend))
+                                    (when model (concat ":" model))
+                                    (and stream (propertize " ~stream~ " 'face 'consult-web-snippet-face))))
                (annotated-results (propertize placeholder
-                                               'face 'font-lock-operator-face
-                                                :source "gptel"
-                                                :title query
-                                                :url nil
-                                                :query query
-                                                :model model
-                                                :stream stream
-                                                :backend backend)))
+                                              :source "gptel"
+                                              :title query
+                                              :url nil
+                                              :query query
+                                              :model model
+                                              :stream stream
+                                              :backend backend)))
     (list annotated-results)
     ))
-
 
 (defun consult-web--gptel-buffer-name (&optional query &rest args)
   "Returns a string for `consult-web-gptel' buffer name"
@@ -92,11 +93,11 @@ If STREAM is non-nil, the response is streamed."
         (insert (gptel-prompt-prefix-string))
         (insert (format "%s" query))
         (unless query-sent
-                   (erase-buffer)
-                   (insert (gptel-prompt-prefix-string) query)
-                   (setq query-sent t)
-                   (gptel-send)))
-        (current-buffer))))
+          (erase-buffer)
+          (insert (gptel-prompt-prefix-string) query)
+          (setq query-sent t)
+          (gptel-send)))
+      (current-buffer))))
 
 (defun consult-web--gptelbuffer-preview (cand)
   "Shows a preview buffer of CAND for `consult-web-gptel'.

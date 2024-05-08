@@ -16,23 +16,21 @@
 
 (require 'consult-web)
 
-(defun consult-web--youtube-format-candidate (source query url search-url title snippet channeltitle)
+(defun consult-web--youtube-format-candidate (source query title snippet channeltitle date)
 "Formats a candidate for `consult-web-youtube' commands.
 "
   (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
          (source (propertize source 'face 'consult-web-source-face))
          (match-str (if (stringp query) (consult--split-escaped query) nil))
-         (urlobj (and url (url-generic-parse-url url)))
-         (domain (and (url-p urlobj) (url-domain urlobj)))
-         (domain (and (stringp domain) (propertize domain 'face 'consult-web-domain-face)))
+         (date (and (stringp date) (propertize date 'face 'consult-web-date-face)))
          (channeltitle (and (stringp channeltitle) (propertize channeltitle 'face 'consult-web-path-face)))
          (snippet (if (stringp snippet) (consult-web--set-string-width snippet (* 2 frame-width-percent))))
          (snippet (and (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
          (title-str (consult-web--set-string-width title (* 6 frame-width-percent)))
-         (title-str (propertize title-str 'face 'consult-web-default-face))
+         (title-str (propertize title-str 'face 'consult-web-engine-source-face))
          (str (concat title-str
-                      (when domain (concat "\s" domain))
-                      (when channeltitle (concat " - " channeltitle))
+                      (when date (concat "\s" date))
+                      (when channeltitle (concat " " channeltitle))
                       (when snippet (concat "\s\s" snippet))
                       (concat "\t" source)))
          )
@@ -120,7 +118,7 @@ for details"
                                                      (search-url (consult-web--make-url-string consult-web-youtube-search-results-url `(("search_query" . ,query))))
                                                      (description (gethash "description" snippet))
 
-                                                     (decorated (consult-web--youtube-format-candidate source query url search-url title snippet channeltitle)))
+                                                     (decorated (consult-web--youtube-format-candidate source query title snippet channeltitle date)))
                                                 (propertize decorated
                                                             :source source
                                                             :title title

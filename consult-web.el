@@ -318,11 +318,11 @@ This is used for defining narrow functions
 "The face for source annotation in minibuffer.")
 
 (defface consult-web-date-face
-  `((t :inherit 'font-lock-string-face))
-"The face for academic literature source types in minibuffer.")
+  `((t :inherit 'font-lock-variable-face))
+"The face for date annotation in minibuffer.")
 
 (defface consult-web-domain-face
-  `((t :inherit 'font-lock-variable-face))
+  `((t :inherit 'font-lock-string-face))
 "The face for domain annotation in minibuffer.")
 
 (defface consult-web-path-face
