@@ -90,7 +90,7 @@ See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/i
       :headers headers
       :data  (json-encode `((model . ,model)
                     (messages . [((role . "user")
-                                  (content . ,input))])))
+                                  (content . ,query))])))
       :parser #'consult-web--default-url-parse-buffer
       :callback
       (lambda (attrs)

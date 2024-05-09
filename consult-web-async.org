@@ -2949,7 +2949,7 @@ See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/i
       :headers headers
       :data  (json-encode `((model . ,model)
                     (messages . [((role . "user")
-                                  (content . ,input))])))
+                                  (content . ,query))])))
       :parser #'consult-web--default-url-parse-buffer
       :callback
       (lambda (attrs)
@@ -3083,7 +3083,7 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
                          consult-web-default-page))
                (count (max count 1))
                (page (* page count))
-               (params `(("q" . ,(replace-regexp-in-string " " "+" input))
+               (params `(("q" . ,(replace-regexp-in-string " " "+" query))
                          ("count" . ,(format "%s" count))
                          ("offset" . ,(format "%s" page))))
                (headers `(("Ocp-Apim-Subscription-Key" . ,(consult-web-expand-variable-function consult-web-bing-search-api-key)))))
@@ -3812,7 +3812,8 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
                (filter (if (member filter '(0 1)) filter 1))
                (count (min count 10))
                (page (+ (* page count) 1))
-               (params `(("q" . ,(replace-regexp-in-string " " "+" input))
+               (page (min page (- 100 count)))
+               (params `(("q" . ,(replace-regexp-in-string " " "+" query))
                          ("key" . ,(consult-web-expand-variable-function consult-web-google-customsearch-key))
                          ("cx" . ,(consult-web-expand-variable-function consult-web-google-customsearch-cx))
                          ("gl" . "en")
@@ -4579,8 +4580,10 @@ See URL `https://dev.elsevier.com/documentation/SCOPUSSearchAPI.wadl' for more i
                            :annotate nil
                            )
 
-#+End_src
+#+end_src
+
 **** provide and footer
+
 #+begin_src emacs-lisp
 ;;; provide `consult-web-scopus' module
 
@@ -4804,7 +4807,7 @@ for details"
                (count (min count 10))
                (page (+ (* page count) 1))
                (order  (if (and order (member (format "%s" order) '("date" "rating" "relevance" "title" "videoCount" "viewCount"))) (format "%s" order) "relevance"))
-               (params `(("q" . ,query)
+               (params `(("q" . ,(replace-regexp-in-string " " "+" query))
                          ("part" . "snippet")
                          ("order" . ,order)
                          ("type" . ,type)

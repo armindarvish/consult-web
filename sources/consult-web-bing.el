@@ -69,7 +69,7 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
                          consult-web-default-page))
                (count (max count 1))
                (page (* page count))
-               (params `(("q" . ,(replace-regexp-in-string " " "+" input))
+               (params `(("q" . ,(replace-regexp-in-string " " "+" query))
                          ("count" . ,(format "%s" count))
                          ("offset" . ,(format "%s" page))))
                (headers `(("Ocp-Apim-Subscription-Key" . ,(consult-web-expand-variable-function consult-web-bing-search-api-key)))))

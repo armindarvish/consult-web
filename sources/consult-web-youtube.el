@@ -82,7 +82,7 @@ for details"
                (count (min count 10))
                (page (+ (* page count) 1))
                (order  (if (and order (member (format "%s" order) '("date" "rating" "relevance" "title" "videoCount" "viewCount"))) (format "%s" order) "relevance"))
-               (params `(("q" . ,query)
+               (params `(("q" . ,(replace-regexp-in-string " " "+" query))
                          ("part" . "snippet")
                          ("order" . ,order)
                          ("type" . ,type)
