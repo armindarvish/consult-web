@@ -42,6 +42,7 @@ SNIPPET is a string containing a snippet/description of candidate
   (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
          (source (and (stringp source) (propertize source 'face 'consult-web-source-face)))
          (title (format "ask gptel: %s" (if query (string-trim-right query) "")))
+         (match-str (and (stringp query) (consult--split-escaped query) nil))
          (backend (and (stringp backend) (propertize backend 'face 'consult-web-domain-face)))
          (model (and (stringp model) (propertize model 'face 'consult-web-path-face)))
          (stream (and stream (propertize "~stream~" 'face 'consult-web-snippet-face)))
@@ -127,6 +128,7 @@ metadata MODEL and BACKEND as text properties, so it can be send to
     (error "consult-web: gptel is not available. Make sure to install and load `gptel'."))
   (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
                (opts (car-safe opts))
+               (source "gptel")
                (backend (and (plist-member opts :backend) (format "%s" (plist-get opts :backend))))
                (backend (and backend (car (seq-filter (lambda (item) (when (string-match (format "%s" backend) item) item)) (mapcar #'car gptel--known-backends)))))
                (backend (or backend (gptel-backend-name gptel-backend)))
@@ -137,7 +139,7 @@ metadata MODEL and BACKEND as text properties, so it can be send to
                (stream (or (and (plist-member opts :stream) (plist-get opts :stream)) gptel-stream))
                (placeholder (consult-web--gptel-format-candidate :source source :query query :model model :backend backend :stream stream))
                (annotated-results (propertize placeholder
-                                              :source "gptel"
+                                              :source source
                                               :title query
                                               :url nil
                                               :query query

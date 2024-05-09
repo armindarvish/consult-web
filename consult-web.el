@@ -1364,7 +1364,7 @@ PROMPT COLLECTION and INITIAL are passed to `consult--read'."
                  (append
                   options
                   (list
-                   :sort        t
+                   :sort        nil
                    :history     'consult-web--selection-history
                    :category    'multi-category
                    :predicate   (apply-partially #'consult-web--multi-predicate sources)
@@ -1559,7 +1559,7 @@ POS and CATEGORY are the group ID and category for these items."
                             (and items (consult-web--multi-propertize
                                         items cat idx face)))
                       (funcall async 'flush)
-                      (funcall async (apply #'append (append candidates nil)))
+                      (funcall async (delq nil (apply #'append  (append candidates nil))))
                       )
                      ((equal async-type 'sync)
                       (setq items (funcall items input args))
@@ -1567,7 +1567,7 @@ POS and CATEGORY are the group ID and category for these items."
                             (and items (consult-web--multi-propertize
                                         items cat idx face)))
                       (funcall async 'flush)
-                      (funcall async (apply #'append (append candidates nil)))
+                      (funcall async (delq nil (apply #'append  (append candidates nil))))
                       )
                      ((equal async-type 'async)
                       (if input (funcall items input      ; async source, refresh in callback
@@ -1576,7 +1576,7 @@ POS and CATEGORY are the group ID and category for these items."
                                    (aset candidates pos
                                          (consult-web--multi-propertize response-items cat pos face))
                                    (funcall async 'flush)
-                                   (funcall async (apply #'append (append candidates nil)))
+                                   (funcall async (delq nil (apply #'append  (append candidates nil))))
                                    (funcall async 'refresh)
                                    )) args)))
                      (t
@@ -1592,7 +1592,8 @@ POS and CATEGORY are the group ID and category for these items."
              nil)
               )))
         (cl-incf idx))
-      candidates))
+      (delq nil (apply #'append  (append candidates nil)))
+      ))
 
 (defun consult-web--multi-dynamic-compute (async sources &rest args)
   "Dynamic computation of candidates.
@@ -1646,97 +1647,6 @@ should be restarted."
          (funcall async 'destroy))
         (_ (funcall async action))))))
 
-(defun consult-web--async-sink ()
-  "Create ASYNC sink function.
-
-An async function must accept a single action argument.  For the
-\\='setup action it is guaranteed that the call originates from
-the minibuffer.  For the other actions no assumption about the
-context can be made.
-
-\\='setup   Setup the internal closure state.  Return nil.
-\\='destroy Destroy the internal closure state.  Return nil.
-\\='flush   Flush the list of candidates.  Return nil.
-\\='refresh Request UI refresh.  Return nil.
-nil      Return the list of candidates.
-list     Append the list to the already existing candidates list and return it.
-string   Update with the current user input string.  Return nil."
-  (let (candidates last buffer)
-    (lambda (action)
-      (pcase-exhaustive action
-        ('setup
-         (setq buffer (current-buffer))
-         nil)
-        ((or (pred stringp) 'destroy) nil)
-        ('flush (setq candidates nil last nil))
-        ('refresh
-         ;; Refresh the UI when the current minibuffer window belongs
-         ;; to the current asynchronous completion session.
-         (when-let (win (active-minibuffer-window))
-           (when (eq (window-buffer win) buffer)
-             (with-selected-window win
-               (run-hooks 'consult--completion-refresh-hook)
-               ;; Interaction between asynchronous completion functions and
-               ;; preview: We have to trigger preview immediately when
-               ;; candidates arrive (gh:minad/consult#436).
-               (when (and consult--preview-function candidates)
-                 (funcall consult--preview-function)))))
-         nil)
-        ('nil candidates)
-        ((pred consp)
-         (setq last (last (if last (setcdr last action) (setq candidates action))))
-         candidates)))))
-
-(defun consult-web--multi-async (async sources)
-  "Merge the results of (a)sync SOURCES and pass it to function ASYNC."
-  (let ((candidates (make-vector (length sources) nil)))
-    (lambda (action)
-      (pcase action
-        ((pred stringp)
-         (unless (equal action "")
-           (let ((idx 0))
-             (seq-doseq (src sources)
-               (let* ((face (and (plist-member src :face) `(face ,(plist-get src :face))))
-                      (cat (plist-get src :category))
-                      (items (plist-get src :items))
-                      (narrow (plist-get src :narrow))
-                      (type (or (car-safe narrow) narrow -1))
-                      (pos idx))
-                 (when (or (eq consult--narrow type)
-                           (not (or consult--narrow (plist-get src :hidden))))
-                   (condition-case nil
-                       (progn
-                         (when (functionp items)
-                           (cond
-                            ((and (integerp (cdr (func-arity items))) (< (cdr (func-arity items)) 1))
-                             (setq items (funcall items))
-                             (aset candidates idx    ; sync source, refresh now
-                               (and items (consult-web--multi-propertize
-                                           items cat idx face)))
-                             (funcall async 'flush)
-                             (funcall async (apply #'append (append candidates nil))))
-                            ((and (integerp (cdr (func-arity items))) (< (cdr (func-arity items)) 2))
-                             (setq items (funcall items action))
-                             (aset candidates idx    ; sync source, refresh now
-                                   (and items (consult-web--multi-propertize
-                                               items cat idx face)))
-                             (funcall async 'flush)
-                             (funcall async (apply #'append (append candidates nil))))
-                            ((and (integerp (cdr (func-arity items))) (< (cdr (func-arity items)) 3))
-                             (funcall items action      ; async source, refresh in callback
-                               (lambda (response-items)
-                                 (when response-items
-                                   (aset candidates pos
-                                         (consult-web--multi-propertize response-items cat pos face))
-                                   (funcall async 'flush)
-                                   (funcall async (apply #'append (append candidates nil))))))))
-                            ))
-                     (t
-                      (message "calling :items in %s source produced error" src))
-                     )))
-               (cl-incf idx)))))
-        (_ (funcall async action))))))
-
 (defun consult-web--multi-dynamic-collection (sources &rest args)
 (thread-first
   (consult--async-sink)
@@ -1752,8 +1662,8 @@ string   Update with the current user input string.  Return nil."
                  (append
                   options
                   (list
-                   :sort        t
-                   :history     'consult-web--search-history
+                   :sort        nil
+                   :history     '(:input consult-web--search-history)
                    :initial     (consult--async-split-initial nil)
                    :category    'multi-category
                    :predicate   (apply-partially #'consult-web--multi-predicate sources)
@@ -2140,9 +2050,8 @@ macro. See `consult-web-define-source' for more details"
     (display-warning :warning (format "Consult-web: %s is not available. Make sure `consult-notes' is loaded and set up properly" consult-source)))
   )
 
-;;; Frontend Interactive Commands
 (defun consult-web-multi (&optional initial sources no-callback &rest args)
-"Interactive “multi-source dynamic search”
+  "Interactive “multi-source dynamic search”
 
 INITIAL is the initial search prompt in minibuffer.
 Searches all sources in SOURCES. if SOURCES is nil
@@ -2194,30 +2103,6 @@ URL `https://github.com/armindarvish/consult-web'.
 
 For more details on consult--async functionalities, see `consult-grep'
 and the official manual of consult, here: URL `https://github.com/minad/consult'."
-  (interactive "P")
-  (let* ((input (or input
-                    (and consult-web-default-autosuggest-command (funcall-interactively consult-web-default-autosuggest-command))
-                    (consult-web--read-search-string)))
-         (sources (or sources consult-web-multi-sources))
-         (sources (remove nil (mapcar (lambda (source) (plist-get (cdr (assoc source consult-web-sources-alist)) :source)) sources)))
-         (candidates (consult--slow-operation "The web is a big place, allow me a few seconds..." (mapcar (lambda (func) (funcall func input args)) sources)))
-         (selected (consult--multi candidates
-                                   :require-match nil
-                                   :prompt (concat "[" (propertize "consult-web-multi" 'face 'consult-web-prompt-face) "]" " Search:  ")
-                                   :sort t
-                                   :annotate nil
-                                   :category 'consult-web
-                                   :history 'consult-web--selection-history
-                                   ))
-         (source (get-text-property 0 :source (car selected)))
-         )
-    (unless no-callback
-      (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-callback) (car selected)))
-    (car selected)
-    ))
-
-
-(defun consult-web-multi (&optional initial sources no-callback &rest args)
   (interactive "P")
   (let* ((consult-async-refresh-delay consult-web-dynamic-refresh-delay)
          (consult-async-input-throttle consult-web-dynamic-input-throttle)
