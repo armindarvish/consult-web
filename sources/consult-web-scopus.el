@@ -16,11 +16,12 @@
 
 (require 'consult-web)
 
-(defun consult-web--scopus-format-candidate (source query url search-url title authors date journal doi)
+(cl-defun consult-web--scopus-format-candidate (&rest args &key source query url search-url title authors date journal doi face &allow-other-keys)
   "Returns a formatted string for candidates of `consult-web-scopus'.
 
 TABLE is a hashtable from `consult-web--scopus-fetch-results'."
-  (let* ((source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
+  (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+         (source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
          (date (if (stringp date) (propertize date 'face 'consult-web-date-face) nil))
          (journal (if (stringp journal) (propertize journal 'face 'consult-web-domain-face) nil))
          (authors (cond
@@ -33,8 +34,9 @@ TABLE is a hashtable from `consult-web--scopus-fetch-results'."
          (authors (if (and authors (stringp authors)) (propertize authors 'face 'consult-web-source-face)))
          (doi (if (stringp doi) (propertize doi 'face 'link) nil))
          (match-str (if (stringp query) (consult--split-escaped query) nil))
-         (title-str (consult-web--set-string-width title (floor (* (frame-width) 0.4))))
-         (title-str (propertize title-str 'face (or 'consult-web-scholar-source-face)))
+         (face (or (consult-web--get-source-prop source :face) face 'consult-web-default-face))
+         (title-str (propertize title 'face face))
+         (title-str (consult-web--set-string-width title-str (* 5 frame-width-percent)))
          (str (concat title-str
                       (if journal (format "\t%s" journal))
                       (if date (format "\s\s%s" date))
@@ -122,7 +124,7 @@ See URL `https://dev.elsevier.com/documentation/SCOPUSSearchAPI.wadl' for more i
 
                                                           (search-url (concat consult-web-scopus-search-url "&eid=" eid "&origin=inward"))
 
-                                                          (decorated (consult-web--scopus-format-candidate source query url search-url title authors date journal doi)))
+                                                          (decorated (consult-web--scopus-format-candidate :source source :query query :url url :search-url search-url :title title :authors authors :date date :journal journal :doi doi)))
                                                        (propertize decorated
                                                                    :source source
                                                                    :url url

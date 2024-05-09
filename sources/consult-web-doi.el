@@ -48,7 +48,7 @@
                (url (consult-web--doi-to-url query))
                (title (format "%s" query))
                (search-url (concat consult-web-doiorg-search-url query))
-               (decorated (funcall consult-web-default-format-candidate :source source :query query :url url :search-url search-url :title title :face 'link))
+               (decorated (funcall consult-web-default-format-candidate :source source :query query :url url :search-url search-url :title title))
                (annotated-results (propertize decorated
                                               :source source
                                               :title title
@@ -71,6 +71,7 @@
 (consult-web-define-source "doiorg"
                            :narrow-char ?d
                            :type 'sync
+                           :face 'link
                            :request #'consult-web--doiorg-fetch-results
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--doi-search-history

@@ -140,7 +140,7 @@ for more info."
                                                           (ids (gethash "articleids" data))
                                                           (doi (car (remove nil (mapcar (lambda (item) (if (equal (gethash "idtype" item) "doi") (gethash "value" item))) ids))))
 
-                                                          (decorated (consult-web-dynamic--pubmed-format-candidate source query url search-url title authors date journal doi)))
+                                                          (decorated (consult-web-dynamic--pubmed-format-candidate :source source :query query :url url :search-url search-url :title title :authors authors :date date :journal journal :doi doi)))
                                                        (propertize decorated
                                                                    :source source
                                                                    :url url
@@ -157,7 +157,7 @@ for more info."
                                     )
                                 annotated-results)))))
 
-(defun consult-web-dynamic--pubmed-format-candidate (source query url search-url title authors date journal doi)
+(cl-defun consult-web-dynamic--pubmed-format-candidate (&rest args &key source query url search-url title authors date journal doi face &allow-other-keys)
   "Returns a formatted string for candidates of `consult-web-pubmed'.
 
 TABLE is a hashtable from `consult-web--pubmed-fetch-results'."
@@ -174,9 +174,9 @@ TABLE is a hashtable from `consult-web--pubmed-fetch-results'."
          (authors (if (and authors (stringp authors)) (propertize authors 'face 'consult-web-source-face)))
          (doi (if (stringp doi) (propertize doi 'face 'link)))
          (match-str (if (stringp query) (consult--split-escaped query) nil))
-         (title-str (consult-web--set-string-width title (* frame-width-percent 5)))
-         (face (or (plist-get (cdr (assoc source consult-web-sources-alist)) :face) 'consult-web-scholar-source-face))
-         (title-str (propertize title-str 'face face))
+         (face (or (consult-web--get-source-prop source :face) face 'consult-web-default-face))
+         (title-str (propertize title 'face face))
+         (title-str (consult-web--set-string-width title-str (* 5 frame-width-percent)))
          (str (concat title-str
                       (if journal (format "\t%s" journal))
                       (if date (format "\s\s%s" date))

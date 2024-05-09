@@ -18,17 +18,22 @@
 )
 
 (setq consult-web-sources--all-modules-list
-      (list 'consult-web-chatgpt
-            'consult-web-bing
+      (list 'consult-web-bing
             'consult-web-brave-autosuggest
             'consult-web-brave
+            'consult-web-buffer
+            'consult-web-chatgpt
             'consult-web-doi
+            'consult-web-duckduckgo
             'consult-web-elfeed
             'consult-web-google
             'consult-web-google-autosuggest
             'consult-web-gptel
+            'consult-web-line-multi
+            'consult-web-notes
             'consult-web-pubmed
             'consult-web-scopus
+            'consult-web-stackoverflow
             'consult-web-wikipedia
             'consult-web-youtube))
 

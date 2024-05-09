@@ -66,7 +66,7 @@ See URL `https://brave.com/search/api/' for more info"
                                     (title (gethash "title" item))
                                     (snippet (gethash "description" item))
                                     (search-url (consult-web--make-url-string consult-web-brave-search-url params))
-                                    (decorated (funcall consult-web-default-format-candidate :source source :query query :url url :search-url search-url :title title :snippet snippet :face 'consult-web-engine-source-face)))
+                                    (decorated (funcall consult-web-default-format-candidate :source source :query query :url url :search-url search-url :title title :snippet snippet)))
                                  (propertize decorated
                                              :source source
                                              :title title

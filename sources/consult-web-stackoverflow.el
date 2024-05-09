@@ -39,7 +39,8 @@ SNIPPET is a string containing a snippet/description of candidate
                      (propertize consult-web-stackoverflow-unanswered-mark 'face 'error)))
          (score (and score (propertize (format "%s" score) 'face 'consult-web-path-face)))
          (match-str (and (stringp query) (consult--split-escaped query) nil))
-         (title-str (propertize title 'face (or face 'consult-web-default-face)))
+         (face (or (consult-web--get-source-prop source :face) face 'consult-web-default-face))
+         (title-str (propertize title 'face face))
          (title-str (consult-web--set-string-width title-str (* 7 frame-width-percent)))
          (str (concat title-str
                       (when date (concat "\s" date))
@@ -168,7 +169,7 @@ See URL `https://api.stackexchange.com/' for more info.
                                                      (answered (gethash "is_answered" item))
                                                      (score (gethash "score" item))
                                                      (search-url (concat consult-web-stackoverflow-search-url "?q=" input))
-                                                     (decorated (consult-web--stackoverflow-format-candidate :source source :query query :url url :search-url search-url :title title :date date :answered answered :score score :face 'consult-web-engine-source-face)))
+                                                     (decorated (consult-web--stackoverflow-format-candidate :source source :query query :url url :search-url search-url :title title :date date :answered answered :score score)))
                                                   (propertize decorated
                                                               :source source
                                                               :title title

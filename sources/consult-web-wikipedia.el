@@ -36,9 +36,10 @@ SNIPPET is a string containing a snippet/description of candidate
          (source (and (stringp source) (propertize source 'face 'consult-web-source-face)))
          (date (and (stringp date) (propertize date 'face 'consult-web-date-face)))
          (match-str (and (stringp query) (consult--split-escaped query) nil))
-         (title-str (propertize title 'face (or face 'consult-web-default-face)))
-         (title-str (consult-web--set-string-width title-str (* 4 frame-width-percent)))
-         (snippet (and (stringp snippet) (consult-web--set-string-width snippet (* 5 frame-width-percent))))
+         (face (or (consult-web--get-source-prop source :face) face 'consult-web-default-face))
+         (title-str (propertize title 'face face))
+         (title-str (consult-web--set-string-width title-str (* 3 frame-width-percent)))
+         (snippet (and (stringp snippet) (consult-web--set-string-width (string-trim snippet) (* 6 frame-width-percent))))
          (snippet (and (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
          (str (concat title-str
                       (when date (concat "\s" date))
@@ -95,9 +96,9 @@ SNIPPET is a string containing a snippet/description of candidate
                                     (url (concat consult-web-wikipedia-url "wiki/" (string-replace " " "_" title)))
                                     (date (gethash "timestamp" item))
                                     (date (format-time-string "%Y-%m-%d" (date-to-time date)))
-                                    (snippet (replace-regexp-in-string "<span.*/span>" "" (format "%s" (gethash "snippet" item))))
+                                    (snippet (replace-regexp-in-string "<span.*?>\\|</span>\\|&quot;" "" (format "%s" (gethash "snippet" item))))
                                     (search-url (concat  consult-web-wikipedia-search-url "?" "search=" query))
-                                    (decorated (consult-web--wikipedia-format-candidate :source source :query query :url url :search-url search-url :title title :snippet snippet :face 'consult-web-engine-source-face :date date)))
+                                    (decorated (consult-web--wikipedia-format-candidate :source source :query query :url url :search-url search-url :title title :snippet snippet :date date)))
                                  (propertize decorated
                                              :source source
                                              :title title

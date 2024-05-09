@@ -60,7 +60,7 @@ for some limited documentation"
 
                                                           (search-url (consult-web--make-url-string consult-web-duckduckgo-search-url params '("format")))
 
-                                                          (decorated (funcall consult-web-default-format-candidate :source source :query query :url url :search-url search-url :title title :snippet snippet :face 'consult-web-engine-source-face)))
+                                                          (decorated (funcall consult-web-default-format-candidate :source source :query query :url url :search-url search-url :title title :snippet snippet)))
                                                        (propertize decorated
                                                                    :source source
                                                                    :title title

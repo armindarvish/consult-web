@@ -16,7 +16,7 @@
 
 (require 'consult-web)
 
-(cl-defun consult-web--youtube-format-candidate (&rest args &key source query title snippet channeltitle date &allow-other-keys)
+(cl-defun consult-web--youtube-format-candidate (&rest args &key source query title snippet channeltitle date face &allow-other-keys)
 "Formats a candidate for `consult-web-youtube' commands.
 "
   (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
@@ -26,8 +26,9 @@
          (channeltitle (and (stringp channeltitle) (propertize channeltitle 'face 'consult-web-path-face)))
          (snippet (if (stringp snippet) (consult-web--set-string-width snippet (* 2 frame-width-percent))))
          (snippet (and (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
-         (title-str (consult-web--set-string-width title (* 6 frame-width-percent)))
-         (title-str (propertize title-str 'face 'consult-web-engine-source-face))
+         (face (or (consult-web--get-source-prop source :face) face 'consult-web-default-face))
+         (title-str (propertize title 'face face))
+         (title-str (consult-web--set-string-width title-str (* 6 frame-width-percent)))
          (str (concat title-str
                       (when date (concat "\s" date))
                       (when channeltitle (concat " " channeltitle))
