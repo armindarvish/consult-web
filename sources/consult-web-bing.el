@@ -18,24 +18,22 @@
 (defun consult-web--bing-format-candidate (source query url search-url title snippet)
   "Returns a formatted string for candidates of `consult-web-bing'."
   (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
-         (source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
-         (match-str (if (stringp query) (consult--split-escaped query) nil))
+         (source (and (stringp source) (propertize source 'face 'consult-web-source-face)))
+         (match-str (and (stringp query) (consult--split-escaped query) nil))
          (title-str (consult-web--set-string-width title (* 4 frame-width-percent)))
          (title-str (propertize title-str 'face 'consult-web-engine-source-face))
-         (snippet (if (stringp snippet) (consult-web--set-string-width snippet (* 2 frame-width-percent))))
+         (snippet (and (stringp snippet) (consult-web--set-string-width snippet (* 3 frame-width-percent))))
          (snippet (and (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
          (urlobj (and url (url-generic-parse-url url)))
          (domain (and (url-p urlobj) (url-domain urlobj)))
          (domain (and (stringp domain) (propertize domain 'face 'consult-web-domain-face)))
          (path (and (url-p urlobj) (url-filename urlobj)))
          (path (and (stringp path) (propertize path 'face 'consult-web-path-face)))
-         (path-string (concat domain path))
-         (path-string (and (stringp path-string) (consult-web--set-string-width path-string (* 3 frame-width-percent))))
+         (url-str (consult-web--set-url-width domain path (* frame-width-percent 2)))
          (str (concat title-str
-                      " "
-                      (if path-string path-string)
-                      (if snippet (concat "\s\s" snippet))
-                      (if source (concat "\t" source)))))
+                      (when url-str (concat "\s" url-str))
+                      (when snippet (concat "\s\s" snippet))
+                      (when source (concat "\t" source)))))
     (if consult-web-highlight-matches
         (cond
          ((listp match-str)
@@ -109,11 +107,12 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
                            :narrow-char ?m
                            :type 'async
                            :face 'consult-web-engine-source-face
+                           :format #'consult-web--bing-format-candidate
                            :request #'consult-web--bing-fetch-results
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () #'my:bing-api-key)
+                           :enabled (lambda () (bound-and-true-p consult-web-bing-search-api-key))
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both

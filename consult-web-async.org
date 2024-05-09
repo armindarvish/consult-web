@@ -398,24 +398,26 @@ Ommits keys in IGNORE-KEYs."
 #+begin_src emacs-lisp
 ;;; Bakcend Functions
 
-(defun consult-web--set-string-width (string width &optional prepend)
+(defun consult-web--set-string-width (string width &optional truncate-pos add-pos)
   "Sets the STRING width to a fixed value, WIDTH.
 
 If the STRING is longer than WIDTH, it truncates the STRING
  and adds ellipsis, \"...\". if the STRING is shorter,
 it adds whitespace to the STRING.
-If PREPEND is non-nil, it truncates or adds whitespace from
- the beginning of STRING, instead of the end."
+If TRUNCATE-POS is non-nil, it truncates from position pos in the STRING
+If ADD-POS is non-nil, it adds whitespace to the end of STRING.
+"
   (let* ((string (format "%s" string))
-         (w (string-width string)))
+         (w (length string)))
     (when (< w width)
-      (if prepend
-          (setq string (format "%s%s" (consult-web-propertize-by-plist (make-string (- width w) ?\s) (text-properties-at 0 string)) (substring string)))
-        (setq string (format "%s%s" (substring string) (consult-web-propertize-by-plist (make-string (- width w) ?\s) (text-properties-at 0 (substring string -1)))))))
+      (if (and add-pos (< add-pos w))
+          (setq string (format "%s%s%s" (substring string 0 add-pos) (consult-web-propertize-by-plist (make-string (- width w) ?\s) (text-properties-at add-pos string)) (substring string add-pos)))
+        (setq string (format "%s%s" (substring string) (consult-web-propertize-by-plist (make-string (- width w) ?\s) (text-properties-at 0 (substring string -1))))))
+      )
     (when (> w width)
-      (if prepend
-          (setq string (format "%s%s" (consult-web-propertize-by-plist "..." (text-properties-at 0 string)) (substring string (- w (- width 3)) w)))
-        (setq string (format "%s%s" (substring string 0 (- width (+ w 3))) (consult-web-propertize-by-plist "..." (text-properties-at 0 (substring string (- width (+ w 3)) )))))))
+      (if (and truncate-pos (< truncate-pos (- width 3)) (>= truncate-pos 0))
+          (setq string (format "%s%s%s" (substring string 0 truncate-pos) (consult-web-propertize-by-plist "..." (text-properties-at truncate-pos string)) (substring string (- 0 (- width truncate-pos 3)))))
+        (setq string (format "%s%s" (substring string 0 (- width 3)) (consult-web-propertize-by-plist "..." (text-properties-at (max (- width 3) 0) string))))))
     string))
 #+end_src
 ****** justify left
@@ -427,13 +429,28 @@ It uses `consult-web--set-string-width' and sets the width
  of the concatenate of STRING+PREFIX
 (e.g. `(concat PREFIX STRING)`) within MAXWIDTH.
 This is used for aligning marginalia info in minibuffer."
-  (let ((s (string-width string))
-        (w (string-width prefix)))
+  (let ((s (length string))
+        (w (length prefix)))
     (if (> maxwidth w)
-    (consult-web--set-string-width string (- maxwidth w) t)
+    (consult-web--set-string-width string (- maxwidth w) 0)
     string
           )
     ))
+
+#+end_src
+***** shorten url
+#+begin_src emacs-lisp
+(defun consult-web--set-url-width (domain path width)
+  (when (stringp domain)
+    (let ((path-width (and (stringp path) (length path)))
+          (path-target-width (- width (length domain))))
+        (cond
+         ((<= path-target-width 0)
+          (consult-web--set-string-width domain width))
+         ((integerp path-width)
+          (concat domain (consult-web--set-string-width path path-target-width (floor (/ path-target-width 2)))))
+         (t
+          (consult-web--set-string-width (concat domain path) width))))))
 
 #+end_src
 ***** highlight match with text-properties
@@ -1055,7 +1072,7 @@ all the key value pairs in the table.
          (source (if (stringp source) (propertize source 'face 'consult-web-source-face)))
          (query (gethash :query table))
          (snippet (gethash :snippet table))
-         (snippet (if (and snippet (stringp snippet) (> (string-width snippet) 25)) (concat (substring snippet 0 22) "...") snippet))
+         (snippet (if (and snippet (stringp snippet) (> (length snippet) 25)) (concat (substring snippet 0 22) "...") snippet))
          (match-str (if (stringp query) (consult--split-escaped (car (consult--command-split query))) nil))
          (title-str (consult-web--set-string-width title (floor (* (frame-width) 0.4))))
          (title-str (propertize title-str 'face (or face 'consult-web-default-face)))
@@ -1109,10 +1126,10 @@ For more info on annotation refer to `consult' manual, particularly 'consult--re
            (extra-args (consult-web-properties-to-plist cand '(:url :source :title :search-url :query :snippet :model :backend))))
       (if domain (setq domain (propertize domain 'face 'consult-web-domain-face)))
       (if path (setq path (propertize path 'face 'consult-web-path-face)))
-      (if (and snippet (stringp snippet) (> (string-width snippet) 25)) (setq snippet (concat (substring snippet 0 22) "...")))
+      (if (and snippet (stringp snippet) (> (length snippet) 25)) (setq snippet (concat (substring snippet 0 22) "...")))
       (setq url-str (concat (if domain domain) (if path path)))
       (unless (string-empty-p url-str) (setq url url-str))
-      (when (and url (> (string-width url) (floor (* (frame-width) 0.4))))
+      (when (and url (> (length url) (floor (* (frame-width) 0.4))))
         (setq url (consult-web--set-string-width url (floor (* (frame-width) 0.4)))))
       (concat (if url (format "\s%s" url)) (if source (format "\t%s" source)) (if snippet (format "\s\s%s" snippet)) (if extra-args (format "\t%s" extra-args)))
     ))
@@ -2965,7 +2982,7 @@ See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/i
                            :on-callback #'consult-web--chatgpt-preview
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () #'my:openai-api-key)
+                           :enabled (lambda () (bound-and-true-p consult-web-openai-api-key))
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both
@@ -3013,24 +3030,22 @@ See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/i
 (defun consult-web--bing-format-candidate (source query url search-url title snippet)
   "Returns a formatted string for candidates of `consult-web-bing'."
   (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
-         (source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
-         (match-str (if (stringp query) (consult--split-escaped query) nil))
+         (source (and (stringp source) (propertize source 'face 'consult-web-source-face)))
+         (match-str (and (stringp query) (consult--split-escaped query) nil))
          (title-str (consult-web--set-string-width title (* 4 frame-width-percent)))
          (title-str (propertize title-str 'face 'consult-web-engine-source-face))
-         (snippet (if (stringp snippet) (consult-web--set-string-width snippet (* 2 frame-width-percent))))
+         (snippet (and (stringp snippet) (consult-web--set-string-width snippet (* 3 frame-width-percent))))
          (snippet (and (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
          (urlobj (and url (url-generic-parse-url url)))
          (domain (and (url-p urlobj) (url-domain urlobj)))
          (domain (and (stringp domain) (propertize domain 'face 'consult-web-domain-face)))
          (path (and (url-p urlobj) (url-filename urlobj)))
          (path (and (stringp path) (propertize path 'face 'consult-web-path-face)))
-         (path-string (concat domain path))
-         (path-string (and (stringp path-string) (consult-web--set-string-width path-string (* 3 frame-width-percent))))
+         (url-str (consult-web--set-url-width domain path (* frame-width-percent 2)))
          (str (concat title-str
-                      " "
-                      (if path-string path-string)
-                      (if snippet (concat "\s\s" snippet))
-                      (if source (concat "\t" source)))))
+                      (when url-str (concat "\s" url-str))
+                      (when snippet (concat "\s\s" snippet))
+                      (when source (concat "\t" source)))))
     (if consult-web-highlight-matches
         (cond
          ((listp match-str)
@@ -3106,11 +3121,12 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
                            :narrow-char ?m
                            :type 'async
                            :face 'consult-web-engine-source-face
+                           :format #'consult-web--bing-format-candidate
                            :request #'consult-web--bing-fetch-results
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () #'my:bing-api-key)
+                           :enabled (lambda () (bound-and-true-p consult-web-bing-search-api-key))
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both
@@ -3153,6 +3169,39 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
 (require 'consult-web)
 #+end_src
 
+
+**** format
+#+begin_src emacs-lisp
+
+(defun consult-web--brave-format-candidate (source query url search-url title snippet)
+  "Returns a formatted string for candidates of `consult-web-scopus'.
+
+TABLE is a hashtable from `consult-web--scopus-fetch-results'."
+  (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+         (source (and (stringp source) (propertize source 'face 'consult-web-source-face)))
+         (match-str (and (stringp query) (consult--split-escaped query) nil))
+         (title-str (consult-web--set-string-width title (* 4 frame-width-percent)))
+         (title-str (propertize title-str 'face 'consult-web-engine-source-face))
+         (snippet (and (stringp snippet) (consult-web--set-string-width snippet (* 3 frame-width-percent))))
+         (snippet (and (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
+         (urlobj (and url (url-generic-parse-url url)))
+         (domain (and (url-p urlobj) (url-domain urlobj)))
+         (domain (and (stringp domain) (propertize domain 'face 'consult-web-domain-face)))
+         (path (and (url-p urlobj) (url-filename urlobj)))
+         (path (and (stringp path) (propertize path 'face 'consult-web-path-face)))
+         (url-str (consult-web--set-url-width domain path (* frame-width-percent 2)))
+         (str (concat title-str
+                      (when url-str (concat "\s" url-str))
+                      (when snippet (concat "\s\s" snippet))
+                      (when source (concat "\t" source)))))
+    (if consult-web-highlight-matches
+        (cond
+         ((listp match-str)
+          (mapcar (lambda (match) (setq str (consult-web--highlight-match match str t))) match-str))
+         ((stringp match-str)
+          (setq str (consult-web--highlight-match match-str str t)))))
+    str))
+#+end_src
 **** brave
 #+begin_src emacs-lisp
 (defvar consult-web-brave-search-url "https://search.brave.com/search")
@@ -3201,29 +3250,18 @@ See URL `https://brave.com/search/api/' for more info"
                      (mapcar (lambda (item)
                                (let*
                                    ((source "Brave")
-                                    (url (format "%s" (gethash "url" item)))
-                                    (title (format "%s" (gethash "title" item)))
-                                    (title (and (stringp title)
-                                                (propertize title 'face 'consult-web-engine-source-face)))
-                                    (urlobj (and url (url-generic-parse-url url)))
-                                    (domain (and (url-p urlobj) (url-domain urlobj)))
-                                    (domain (and (stringp domain)
-                                                 (propertize domain 'face 'font-lock-variable-name-face)))
-                                    (path (and (url-p urlobj) (url-filename urlobj)))
-                                    (path (and (stringp path)
-                                               (propertize path 'face 'font-lock-warning-face)))
-                                    (search-url nil)
-
-                                    (decorated (concat title "\t"
-                                                       (propertize " " 'display '(space :align-to center))
-                                                       domain path " "
-                                                       )))
+                                    (url (gethash "url" item))
+                                    (title (gethash "title" item))
+                                    (snippet (gethash "description" item))
+                                    (search-url (consult-web--make-url-string consult-web-brave-search-url params))
+                                    (decorated (consult-web--brave-format-candidate source query url search-url title snippet)))
                                  (propertize decorated
                                              :source source
                                              :title title
                                              :url url
                                              :search-url search-url
-                                             :query query)))
+                                             :query query
+                                             :snippet snippet)))
 
                              raw-results)))
           (funcall callback annotated-results)
@@ -3233,15 +3271,15 @@ See URL `https://brave.com/search/api/' for more info"
                            :narrow-char ?b
                            :type 'async
                            :face 'consult-web-engine-source-face
+                           :format #'consult-web--brave-format-candidate
                            :request #'consult-web--brave-fetch-results
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () #'my:brave-key)
+                           :enabled (lambda () (bound-and-true-p consult-web-brave-api-key))
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both
-                           :annotate nil
                            )
 #+end_src
 
@@ -3357,7 +3395,7 @@ See URL `https://brave.com/search/api/' for more info"
                            :on-callback #'string-trim
                            :search-history 'consult-web--search-history
                            :selection-history t
-                           :enabled (lambda () #'my:brave-autosuggest-key)
+                           :enabled (lambda () (bound-and-true-p consult-web-brave-autosuggest-api-key))
                            :sort t
                            :dynamic t
                            )
@@ -3474,7 +3512,7 @@ See URL `https://brave.com/search/api/' for more info"
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--doi-search-history
                            :selection-history 'consult-web--doi-selection-history
-                           :enabled (lambda () "true")
+                           :enabled (lambda () (bound-and-true-p consult-web-doiorg-search-url))
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both
@@ -3699,29 +3737,27 @@ Uses `elfeed-show-entry'."
 **** format
 #+begin_src emacs-lisp
 
-(defun consult-web-google-format-candidate (source query url search-url title snippet)
+(defun consult-web--google-format-candidate (source query url search-url title snippet)
   "Returns a formatted string for candidates of `consult-web-scopus'.
 
 TABLE is a hashtable from `consult-web--scopus-fetch-results'."
   (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
-         (source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
-         (match-str (if (stringp query) (consult--split-escaped query) nil))
+         (source (and (stringp source) (propertize source 'face 'consult-web-source-face)))
+         (match-str (and (stringp query) (consult--split-escaped query) nil))
          (title-str (consult-web--set-string-width title (* 4 frame-width-percent)))
          (title-str (propertize title-str 'face 'consult-web-engine-source-face))
-         (snippet (if (stringp snippet) (consult-web--set-string-width snippet (* 2 frame-width-percent))))
+         (snippet (and (stringp snippet) (consult-web--set-string-width snippet (* 3 frame-width-percent))))
          (snippet (and (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
          (urlobj (and url (url-generic-parse-url url)))
          (domain (and (url-p urlobj) (url-domain urlobj)))
          (domain (and (stringp domain) (propertize domain 'face 'consult-web-domain-face)))
          (path (and (url-p urlobj) (url-filename urlobj)))
          (path (and (stringp path) (propertize path 'face 'consult-web-path-face)))
-         (path-string (concat domain path))
-         (path-string (and (stringp path-string) (consult-web--set-string-width path-string (* 3 frame-width-percent))))
+         (url-str (consult-web--set-url-width domain path (* frame-width-percent 2)))
          (str (concat title-str
-                      " "
-                      (if path-string path-string)
-                      (if snippet (concat "\s\s" snippet))
-                      (if source (concat "\t" source)))))
+                      (when url-str (concat "\s" url-str))
+                      (when snippet (concat "\s\s" snippet))
+                      (when source (concat "\t" source)))))
     (if consult-web-highlight-matches
         (cond
          ((listp match-str)
@@ -3803,7 +3839,7 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
                                                           (snippet (string-trim (format "%s" (gethash "snippet" item))))
                                                           (search-url (consult-web--make-url-string consult-web-google-search-url params '("key" "cx" "gl")))
 
-                                                          (decorated (consult-web-google-format-candidate source query url search-url title snippet)))
+                                                          (decorated (consult-web--google-format-candidate source query url search-url title snippet)))
                                                        (propertize decorated
                                                                    :source source
                                                                    :title title
@@ -3822,11 +3858,12 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
                            :narrow-char ?g
                            :type 'async
                            :face 'consult-web-engine-source-face
+                           :format #'consult-web--google-format-candidate
                            :request #'consult-web--google-fetch-results
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () #'my:google-search-api-cx-and-key)
+                           :enabled (lambda () (bound-and-true-p consult-web-google-customsearch-key))
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both
@@ -3933,7 +3970,7 @@ Uses `consult-web-google-autosuggest-api-url' as autosuggest api url."
                            :search-history 'consult-web--search-history
                            :selection-history t
                            :group #'consult-web--group-function
-                           :enabled (lambda () #'my:brave-autosuggest-key)
+                           :enabled (lambda () (boundp consult-web-google-autosuggest-api-url))
                            :sort t
                            :dynamic t
                            )
@@ -4347,7 +4384,7 @@ DATABASE is passed as DB to `consult-web--pubmed-esearch-fetch-results' and `con
                            :category 'consult-web-scholar
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () #'my:pubmed-api-key)
+                           :enabled (lambda () (bound-and-true-p consult-web-pubmed-api-key))
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both
@@ -4535,7 +4572,7 @@ See URL `https://dev.elsevier.com/documentation/SCOPUSSearchAPI.wadl' for more i
                            :on-callback #'consult-web--scopus-callback
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () #'my:scopus-api-key)
+                           :enabled (lambda () (bound-and-true-p consult-web-scopus-api-key))
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both
@@ -4656,7 +4693,7 @@ See URL `https://dev.elsevier.com/documentation/SCOPUSSearchAPI.wadl' for more i
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () "true")
+                           :enabled (lambda () (boundp  'consult-web-wikipedia-api-url))
                            :group #'consult-web--group-function
                            :sort t
                            :type 'async
@@ -4829,7 +4866,7 @@ for details"
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () #'my:google-search-api-cx-and-key)
+                           :enabled (lambda () (bound-and-true-p consult-web-youtube-search-key))
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both

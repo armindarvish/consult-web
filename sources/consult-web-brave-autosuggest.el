@@ -93,7 +93,7 @@ See URL `https://brave.com/search/api/' for more info"
                            :on-callback #'string-trim
                            :search-history 'consult-web--search-history
                            :selection-history t
-                           :enabled (lambda () #'my:brave-autosuggest-key)
+                           :enabled (lambda () (bound-and-true-p consult-web-brave-autosuggest-api-key))
                            :sort t
                            :dynamic t
                            )

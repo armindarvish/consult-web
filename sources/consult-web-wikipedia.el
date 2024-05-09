@@ -93,7 +93,7 @@
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () "true")
+                           :enabled (lambda () (boundp  'consult-web-wikipedia-api-url))
                            :group #'consult-web--group-function
                            :sort t
                            :type 'async

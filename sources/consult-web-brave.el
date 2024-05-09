@@ -16,6 +16,35 @@
 
 (require 'consult-web)
 
+(defun consult-web--brave-format-candidate (source query url search-url title snippet)
+  "Returns a formatted string for candidates of `consult-web-scopus'.
+
+TABLE is a hashtable from `consult-web--scopus-fetch-results'."
+  (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+         (source (and (stringp source) (propertize source 'face 'consult-web-source-face)))
+         (match-str (and (stringp query) (consult--split-escaped query) nil))
+         (title-str (consult-web--set-string-width title (* 4 frame-width-percent)))
+         (title-str (propertize title-str 'face 'consult-web-engine-source-face))
+         (snippet (and (stringp snippet) (consult-web--set-string-width snippet (* 3 frame-width-percent))))
+         (snippet (and (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
+         (urlobj (and url (url-generic-parse-url url)))
+         (domain (and (url-p urlobj) (url-domain urlobj)))
+         (domain (and (stringp domain) (propertize domain 'face 'consult-web-domain-face)))
+         (path (and (url-p urlobj) (url-filename urlobj)))
+         (path (and (stringp path) (propertize path 'face 'consult-web-path-face)))
+         (url-str (consult-web--set-url-width domain path (* frame-width-percent 2)))
+         (str (concat title-str
+                      (when url-str (concat "\s" url-str))
+                      (when snippet (concat "\s\s" snippet))
+                      (when source (concat "\t" source)))))
+    (if consult-web-highlight-matches
+        (cond
+         ((listp match-str)
+          (mapcar (lambda (match) (setq str (consult-web--highlight-match match str t))) match-str))
+         ((stringp match-str)
+          (setq str (consult-web--highlight-match match-str str t)))))
+    str))
+
 (defvar consult-web-brave-search-url "https://search.brave.com/search")
 
 (defvar consult-web-brave-url "https://api.search.brave.com/res/v1/web/search")
@@ -62,29 +91,18 @@ See URL `https://brave.com/search/api/' for more info"
                      (mapcar (lambda (item)
                                (let*
                                    ((source "Brave")
-                                    (url (format "%s" (gethash "url" item)))
-                                    (title (format "%s" (gethash "title" item)))
-                                    (title (and (stringp title)
-                                                (propertize title 'face 'consult-web-engine-source-face)))
-                                    (urlobj (and url (url-generic-parse-url url)))
-                                    (domain (and (url-p urlobj) (url-domain urlobj)))
-                                    (domain (and (stringp domain)
-                                                 (propertize domain 'face 'font-lock-variable-name-face)))
-                                    (path (and (url-p urlobj) (url-filename urlobj)))
-                                    (path (and (stringp path)
-                                               (propertize path 'face 'font-lock-warning-face)))
-                                    (search-url nil)
-
-                                    (decorated (concat title "\t"
-                                                       (propertize " " 'display '(space :align-to center))
-                                                       domain path " "
-                                                       )))
+                                    (url (gethash "url" item))
+                                    (title (gethash "title" item))
+                                    (snippet (gethash "description" item))
+                                    (search-url (consult-web--make-url-string consult-web-brave-search-url params))
+                                    (decorated (consult-web--brave-format-candidate source query url search-url title snippet)))
                                  (propertize decorated
                                              :source source
                                              :title title
                                              :url url
                                              :search-url search-url
-                                             :query query)))
+                                             :query query
+                                             :snippet snippet)))
 
                              raw-results)))
           (funcall callback annotated-results)
@@ -94,15 +112,15 @@ See URL `https://brave.com/search/api/' for more info"
                            :narrow-char ?b
                            :type 'async
                            :face 'consult-web-engine-source-face
+                           :format #'consult-web--brave-format-candidate
                            :request #'consult-web--brave-fetch-results
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () #'my:brave-key)
+                           :enabled (lambda () (bound-and-true-p consult-web-brave-api-key))
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both
-                           :annotate nil
                            )
 
 ;;; provide `consult-web-brave' module

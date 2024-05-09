@@ -78,7 +78,7 @@ Uses `consult-web-google-autosuggest-api-url' as autosuggest api url."
                            :search-history 'consult-web--search-history
                            :selection-history t
                            :group #'consult-web--group-function
-                           :enabled (lambda () #'my:brave-autosuggest-key)
+                           :enabled (lambda () (boundp consult-web-google-autosuggest-api-url))
                            :sort t
                            :dynamic t
                            )

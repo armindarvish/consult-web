@@ -123,7 +123,7 @@ See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/i
                            :on-callback #'consult-web--chatgpt-preview
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () #'my:openai-api-key)
+                           :enabled (lambda () (bound-and-true-p consult-web-openai-api-key))
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both

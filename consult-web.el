@@ -358,24 +358,26 @@ Ommits keys in IGNORE-KEYs."
 
 ;;; Bakcend Functions
 
-(defun consult-web--set-string-width (string width &optional prepend)
+(defun consult-web--set-string-width (string width &optional truncate-pos add-pos)
   "Sets the STRING width to a fixed value, WIDTH.
 
 If the STRING is longer than WIDTH, it truncates the STRING
  and adds ellipsis, \"...\". if the STRING is shorter,
 it adds whitespace to the STRING.
-If PREPEND is non-nil, it truncates or adds whitespace from
- the beginning of STRING, instead of the end."
+If TRUNCATE-POS is non-nil, it truncates from position pos in the STRING
+If ADD-POS is non-nil, it adds whitespace to the end of STRING.
+"
   (let* ((string (format "%s" string))
-         (w (string-width string)))
+         (w (length string)))
     (when (< w width)
-      (if prepend
-          (setq string (format "%s%s" (consult-web-propertize-by-plist (make-string (- width w) ?\s) (text-properties-at 0 string)) (substring string)))
-        (setq string (format "%s%s" (substring string) (consult-web-propertize-by-plist (make-string (- width w) ?\s) (text-properties-at 0 (substring string -1)))))))
+      (if (and add-pos (< add-pos w))
+          (setq string (format "%s%s%s" (substring string 0 add-pos) (consult-web-propertize-by-plist (make-string (- width w) ?\s) (text-properties-at add-pos string)) (substring string add-pos)))
+        (setq string (format "%s%s" (substring string) (consult-web-propertize-by-plist (make-string (- width w) ?\s) (text-properties-at 0 (substring string -1))))))
+      )
     (when (> w width)
-      (if prepend
-          (setq string (format "%s%s" (consult-web-propertize-by-plist "..." (text-properties-at 0 string)) (substring string (- w (- width 3)) w)))
-        (setq string (format "%s%s" (substring string 0 (- width (+ w 3))) (consult-web-propertize-by-plist "..." (text-properties-at 0 (substring string (- width (+ w 3)) )))))))
+      (if (and truncate-pos (< truncate-pos (- width 3)) (>= truncate-pos 0))
+          (setq string (format "%s%s%s" (substring string 0 truncate-pos) (consult-web-propertize-by-plist "..." (text-properties-at truncate-pos string)) (substring string (- 0 (- width truncate-pos 3)))))
+        (setq string (format "%s%s" (substring string 0 (- width 3)) (consult-web-propertize-by-plist "..." (text-properties-at (max (- width 3) 0) string))))))
     string))
 
 (defun consult-web--justify-left (string prefix maxwidth)
@@ -384,13 +386,25 @@ It uses `consult-web--set-string-width' and sets the width
  of the concatenate of STRING+PREFIX
 (e.g. `(concat PREFIX STRING)`) within MAXWIDTH.
 This is used for aligning marginalia info in minibuffer."
-  (let ((s (string-width string))
-        (w (string-width prefix)))
+  (let ((s (length string))
+        (w (length prefix)))
     (if (> maxwidth w)
-    (consult-web--set-string-width string (- maxwidth w) t)
+    (consult-web--set-string-width string (- maxwidth w) 0)
     string
           )
     ))
+
+(defun consult-web--set-url-width (domain path width)
+  (when (stringp domain)
+    (let ((path-width (and (stringp path) (length path)))
+          (path-target-width (- width (length domain))))
+        (cond
+         ((<= path-target-width 0)
+          (consult-web--set-string-width domain width))
+         ((integerp path-width)
+          (concat domain (consult-web--set-string-width path path-target-width (floor (/ path-target-width 2)))))
+         (t
+          (consult-web--set-string-width (concat domain path) width))))))
 
 (defun consult-web--highlight-match (regexp str ignore-case)
   "Highlights REGEXP in STR.
@@ -940,7 +954,7 @@ all the key value pairs in the table.
          (source (if (stringp source) (propertize source 'face 'consult-web-source-face)))
          (query (gethash :query table))
          (snippet (gethash :snippet table))
-         (snippet (if (and snippet (stringp snippet) (> (string-width snippet) 25)) (concat (substring snippet 0 22) "...") snippet))
+         (snippet (if (and snippet (stringp snippet) (> (length snippet) 25)) (concat (substring snippet 0 22) "...") snippet))
          (match-str (if (stringp query) (consult--split-escaped (car (consult--command-split query))) nil))
          (title-str (consult-web--set-string-width title (floor (* (frame-width) 0.4))))
          (title-str (propertize title-str 'face (or face 'consult-web-default-face)))
@@ -989,10 +1003,10 @@ For more info on annotation refer to `consult' manual, particularly 'consult--re
            (extra-args (consult-web-properties-to-plist cand '(:url :source :title :search-url :query :snippet :model :backend))))
       (if domain (setq domain (propertize domain 'face 'consult-web-domain-face)))
       (if path (setq path (propertize path 'face 'consult-web-path-face)))
-      (if (and snippet (stringp snippet) (> (string-width snippet) 25)) (setq snippet (concat (substring snippet 0 22) "...")))
+      (if (and snippet (stringp snippet) (> (length snippet) 25)) (setq snippet (concat (substring snippet 0 22) "...")))
       (setq url-str (concat (if domain domain) (if path path)))
       (unless (string-empty-p url-str) (setq url url-str))
-      (when (and url (> (string-width url) (floor (* (frame-width) 0.4))))
+      (when (and url (> (length url) (floor (* (frame-width) 0.4))))
         (setq url (consult-web--set-string-width url (floor (* (frame-width) 0.4)))))
       (concat (if url (format "\s%s" url)) (if source (format "\t%s" source)) (if snippet (format "\s\s%s" snippet)) (if extra-args (format "\t%s" extra-args)))
     ))

@@ -214,7 +214,7 @@ DATABASE is passed as DB to `consult-web--pubmed-esearch-fetch-results' and `con
                            :category 'consult-web-scholar
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () #'my:pubmed-api-key)
+                           :enabled (lambda () (bound-and-true-p consult-web-pubmed-api-key))
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both

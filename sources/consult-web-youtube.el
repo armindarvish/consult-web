@@ -144,7 +144,7 @@ for details"
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () #'my:google-search-api-cx-and-key)
+                           :enabled (lambda () (bound-and-true-p consult-web-youtube-search-key))
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both

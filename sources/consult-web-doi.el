@@ -92,7 +92,7 @@
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--doi-search-history
                            :selection-history 'consult-web--doi-selection-history
-                           :enabled (lambda () "true")
+                           :enabled (lambda () (bound-and-true-p consult-web-doiorg-search-url))
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both

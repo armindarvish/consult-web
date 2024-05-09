@@ -152,7 +152,7 @@ See URL `https://dev.elsevier.com/documentation/SCOPUSSearchAPI.wadl' for more i
                            :on-callback #'consult-web--scopus-callback
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () #'my:scopus-api-key)
+                           :enabled (lambda () (bound-and-true-p consult-web-scopus-api-key))
                            :group #'consult-web--group-function
                            :sort t
                            :dynamic 'both
