@@ -143,6 +143,7 @@ See URL `https://dev.elsevier.com/documentation/SCOPUSSearchAPI.wadl' for more i
 
 (consult-web-define-source "Scopus"
                            :narrow-char ?s
+                           :category 'consult-web-scholar
                            :face 'consult-web-scholar-source-face
                            :type 'async
                            :request #'consult-web--scopus-fetch-results

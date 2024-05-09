@@ -145,6 +145,17 @@ Gets the preview function from `consult-web-sources-alist'."
 
 (add-to-list 'embark-default-action-overrides '(consult-web-scholar . consult-web-embark-default-action))
 
+
+
+(defvar-keymap consult-web-embark-video-actions-map
+  :doc "Keymap for consult-web-embark"
+  :parent consult-web-embark-general-actions-map
+  )
+
+(add-to-list 'embark-keymap-alist '(consult-web-video . consult-web-embark-video-actions-map))
+
+(add-to-list 'embark-default-action-overrides '(consult-web-video . consult-web-embark-default-action))
+
 ;;; Provide `consul-web-embark' module
 
 (provide 'consult-web-embark)

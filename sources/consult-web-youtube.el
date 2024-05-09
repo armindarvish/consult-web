@@ -138,6 +138,7 @@ for details"
 (consult-web-define-source "YouTube"
                            :narrow-char ?y
                            :type 'async
+                           :category 'consult-web-video
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--youtube-fetch-results
                            :format #'consult-web--youtube-format-candidate

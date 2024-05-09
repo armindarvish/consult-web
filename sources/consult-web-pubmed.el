@@ -208,10 +208,10 @@ DATABASE is passed as DB to `consult-web--pubmed-esearch-fetch-results' and `con
 (consult-web-define-source "PubMed"
                            :narrow-char ?p
                            :type 'async
+                           :category 'consult-web-scholar
                            :face 'consult-web-scholar-source-face
                            :request #'consult-web--pubmed-fetch-results
                            :preview-key consult-web-preview-key
-                           :category 'consult-web-scholar
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
                            :enabled (lambda () (bound-and-true-p consult-web-pubmed-api-key))

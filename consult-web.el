@@ -245,10 +245,13 @@ By default inherits from `consult-async-refresh-delay'. "
 "List of all source modules.")
 
 (defvar consult-web-category 'consult-web
-  "Category symbol for the `consult-web' package.")
+  "Category symbol for the consult-web seach")
 
 (defvar consult-web-scholar-category 'consult-web-scholar
-  "Category symbol for the `consult-web' package.")
+  "Category symbol for scholar search")
+
+(defvar consult-web-video-category 'consult-web-video
+  "Category symbol for video search")
 
 (defvar consult-web--selection-history (list)
   "History variable that keeps selected items.")
