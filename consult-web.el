@@ -47,6 +47,13 @@ each symbol being a source featue (e.g. consult-web-brave)"
   :type '(choice (function :tag "(Default) Browse URL" #'browse-url)
                  (function :tag "Custom Function")))
 
+(defcustom consult-web-default-format-candidate #'consult-web--highlight-format-candidate
+  "consult-web default function when selecting a link"
+  :type '(choice (function :tag "(Default) Adds Metadata and Highlights Query" #'consult-web--highlight-format-candidate)
+                 (function :tag "Simple and Fast Foramting (No Metadata)" #'consult-web--simple-format-candidate)
+                 (function :tag "Custom Function")))
+
+
 (defcustom consult-web-alternate-browse-function #'eww-browse-url
   "consult-web default function when selecting a link"
   :type '(choice (function :tag "(Default) EWW" #'eww-browse-url)
@@ -375,8 +382,7 @@ If ADD-POS is non-nil, it adds whitespace to the end of STRING.
     (when (< w width)
       (if (and add-pos (< add-pos w))
           (setq string (format "%s%s%s" (substring string 0 add-pos) (consult-web-propertize-by-plist (make-string (- width w) ?\s) (text-properties-at add-pos string)) (substring string add-pos)))
-        (setq string (format "%s%s" (substring string) (consult-web-propertize-by-plist (make-string (- width w) ?\s) (text-properties-at 0 (substring string -1))))))
-      )
+        (setq string (format "%s%s" (substring string) (make-string (- width w) ?\s)))))
     (when (> w width)
       (if (and truncate-pos (< truncate-pos (- width 3)) (>= truncate-pos 0))
           (setq string (format "%s%s%s" (substring string 0 truncate-pos) (consult-web-propertize-by-plist "..." (text-properties-at truncate-pos string)) (substring string (- 0 (- width truncate-pos 3)))))
@@ -724,7 +730,7 @@ TIMEOUT is the time in seconds for timing out the request.
                           (setf response-data (plist-put response-data :status 'timeout))
                           nil)
                        (if sync
-                           (url-retrieve-synchronously url-with-params nil 'silent)
+                           (url-retrieve-synchronously url-with-params 'silent)
                          (url-retrieve url-with-params
                                        (lambda (_)
                                          (when-let* ((attrs (condition-case nil
@@ -922,49 +928,60 @@ If SPLIT-INITIAL is non-nil, use `consult--async-split-initial' to format the st
         (consult--async-split-initial str)
       str)))
 
-(defun consult-web--table-to-formatted-candidate-simple (table &optional face &rest args)
-"Returns a formatted candidate for TABLE.
+(cl-defun consult-web--simple-format-candidate (&rest args &key source query url search-url title snippet &allow-other-keys)
+  "Returns a simple formatted string for candidates.
 
-TABLE is a hashtable that stores metadata for a consult-web candidate.
-Returns a cons set of `key . value`;
-The key is the value of :title key in the TABLE.
-The value is all the (key value) pairs in the table as a plist.
+SOURCE is the name string of the source for candidate
+
+QUERY is the query string used for searching
+
+URL is a string pointing to url of the candidate
+
+SEARCH-URL is a string pointing to the url for
+the search results of QUERY on the SOURCE website
+
+TITLE is the title of the candidate
+
+SNIPPET is a string containing a snippet/description of candidate
 "
-           (let* ((query (gethash :query table))
-                  (title (format "%s" (gethash :title table)))
-                  (title-str (consult-web--set-string-width title (floor (* (frame-width) 0.4))))
-                  (pl (consult-web-hashtable-to-plist table))
-                   )
-              (apply #'propertize title-str pl)
-))
+  (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+         (title-str (consult-web--set-string-width title (* 5 frame-width-percent))))
+         (concat title-str
+                      (when source (concat "\t" source)))))
 
-(defun consult-web--table-to-formatted-candidate-searchable (table &optional face &rest args)
-"Formats a consult-web candidate.
+(cl-defun consult-web--highlight-format-candidate (&rest args &key source query url search-url title snippet face &allow-other-keys)
+  "Returns a highlighted formatted string for candidates.
 
-TABLE is a hashtable with metadata for the candidate as (key value) pairs.
-Returns a string (from :title field in TABLE) with text-properties that conatin
-all the key value pairs in the table.
+SOURCE is the name string of the source for candidate
+
+QUERY is the query string used for searching
+
+URL is a string pointing to url of the candidate
+
+SEARCH-URL is a string pointing to the url for
+the search results of QUERY on the SOURCE website
+
+TITLE is the title of the candidate
+
+SNIPPET is a string containing a snippet/description of candidate
 "
-  (let* ((pl (consult-web-hashtable-to-plist table))
-         (title (format "%s" (gethash :title table)))
-         (url (gethash :url table))
-         (urlobj (if url (url-generic-parse-url url)))
-         (domain (if (url-p urlobj) (url-domain urlobj)))
-         (domain (if (stringp domain) (propertize domain 'face 'consult-web-domain-face)))
-         (path (if (url-p urlobj) (url-filename urlobj)))
-         (path (if (stringp path) (propertize path 'face 'consult-web-path-face)))
-         (source (gethash :source table))
-         (source (if (stringp source) (propertize source 'face 'consult-web-source-face)))
-         (query (gethash :query table))
-         (snippet (gethash :snippet table))
-         (snippet (if (and snippet (stringp snippet) (> (length snippet) 25)) (concat (substring snippet 0 22) "...") snippet))
-         (match-str (if (stringp query) (consult--split-escaped (car (consult--command-split query))) nil))
-         (title-str (consult-web--set-string-width title (floor (* (frame-width) 0.4))))
-         (title-str (propertize title-str 'face (or face 'consult-web-default-face)))
-         (extra-args (consult-web-hashtable-to-plist table '(:title :url :search-url :query :source :snippet)))
-         (str (concat title-str (if domain (concat "\t" domain (if path path))) (if snippet (format "\s\s%s" snippet)) (if source (concat "\t" source)) (if extra-args (format "\s\s%s" extra-args))))
-         (str (apply #'propertize str pl))
-         )
+  (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+         (source (and (stringp source) (propertize source 'face 'consult-web-source-face)))
+         (match-str (and (stringp query) (consult--split-escaped query) nil))
+         (title-str (propertize title 'face (or face 'consult-web-default-face)))
+         (title-str (consult-web--set-string-width title-str (* 4 frame-width-percent)))
+         (snippet (and (stringp snippet) (consult-web--set-string-width snippet (* 3 frame-width-percent))))
+         (snippet (and (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
+         (urlobj (and url (url-generic-parse-url url)))
+         (domain (and (url-p urlobj) (url-domain urlobj)))
+         (domain (and (stringp domain) (propertize domain 'face 'consult-web-domain-face)))
+         (path (and (url-p urlobj) (url-filename urlobj)))
+         (path (and (stringp path) (propertize path 'face 'consult-web-path-face)))
+         (url-str (consult-web--set-url-width domain path (* frame-width-percent 2)))
+         (str (concat title-str
+                      (when url-str (concat "\s" url-str))
+                      (when snippet (concat "\s\s" snippet))
+                      (when source (concat "\t" source)))))
     (if consult-web-highlight-matches
         (cond
          ((listp match-str)
@@ -1140,7 +1157,8 @@ The preview and retrun actions are retrieve from `consult-web-sources-alist'."
                 ('exit
                  (unless consult-web-log-level
                    (consult-web--kill-hidden-buffers)
-                   (consult-web--kill-dead-buffers))
+                   (consult-web--kill-dead-buffers)
+                   )
                  (funcall buffer-preview 'exit cand))
                 ('preview
                  (if preview (funcall preview cand) (consult-web--default-url-preview cand)))
@@ -1537,7 +1555,6 @@ POS and CATEGORY are the group ID and category for these items."
                                         items cat idx face)))
                       (funcall async 'flush)
                       (funcall async (apply #'append (append candidates nil)))
-                      ;; (funcall async 'refresh)
                       )
                      ((equal async-type 'sync)
                       (setq items (funcall items input args))
@@ -1546,7 +1563,6 @@ POS and CATEGORY are the group ID and category for these items."
                                         items cat idx face)))
                       (funcall async 'flush)
                       (funcall async (apply #'append (append candidates nil)))
-                      ;; (funcall async 'refresh)
                       )
                      ((equal async-type 'async)
                       (if input (funcall items input      ; async source, refresh in callback
@@ -1562,6 +1578,7 @@ POS and CATEGORY are the group ID and category for these items."
                     (message "source %s needs a :type keyword. See the documentation for `consult-web-define-source'." name
                    )))
                     ))
+              ('excessive-lisp-nesting nil)
               ('wrong-type-argument nil)
               ('error
                (message (if consult-web-log-level

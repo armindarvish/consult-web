@@ -16,7 +16,7 @@
 
 (require 'consult-web)
 
-(defun consult-web--youtube-format-candidate (source query title snippet channeltitle date)
+(cl-defun consult-web--youtube-format-candidate (&rest args &key source query title snippet channeltitle date &allow-other-keys)
 "Formats a candidate for `consult-web-youtube' commands.
 "
   (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
@@ -118,7 +118,10 @@ for details"
                                                      (search-url (consult-web--make-url-string consult-web-youtube-search-results-url `(("search_query" . ,query))))
                                                      (description (gethash "description" snippet))
 
-                                                     (decorated (consult-web--youtube-format-candidate source query title snippet channeltitle date)))
+                                                     (decorated (consult-web--youtube-format-candidate :source source :query query :title title :snippet snippet :channeltitle channeltitle :date date))
+
+                                                     ;; (decorated (funcall consult-web-default-format-candidate :source source :query query :url url :search-url search-url :title title :snippet snippet :face 'consult-web-engine-source-face))
+                                                     )
                                                 (propertize decorated
                                                             :source source
                                                             :title title

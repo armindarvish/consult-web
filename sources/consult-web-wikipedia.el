@@ -16,6 +16,42 @@
 
 (require 'consult-web)
 
+(cl-defun consult-web--wikipedia-format-candidate (&rest args &key source query url search-url title snippet date face &allow-other-keys)
+  "Returns a formatted string for Wikipedia's searches.
+
+SOURCE is the name string of the source for candidate
+
+QUERY is the query string used for searching
+
+URL is a string pointing to url of the candidate
+
+SEARCH-URL is a string pointing to the url for
+the search results of QUERY on the SOURCE website
+
+TITLE is the title of the candidate
+
+SNIPPET is a string containing a snippet/description of candidate
+"
+  (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+         (source (and (stringp source) (propertize source 'face 'consult-web-source-face)))
+         (date (and (stringp date) (propertize date 'face 'consult-web-date-face)))
+         (match-str (and (stringp query) (consult--split-escaped query) nil))
+         (title-str (propertize title 'face (or face 'consult-web-default-face)))
+         (title-str (consult-web--set-string-width title-str (* 4 frame-width-percent)))
+         (snippet (and (stringp snippet) (consult-web--set-string-width snippet (* 5 frame-width-percent))))
+         (snippet (and (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
+         (str (concat title-str
+                      (when date (concat "\s" date))
+                      (when snippet (concat "\s\s" snippet))
+                      (when source (concat "\t" source)))))
+    (if consult-web-highlight-matches
+        (cond
+         ((listp match-str)
+          (mapcar (lambda (match) (setq str (consult-web--highlight-match match str t))) match-str))
+         ((stringp match-str)
+          (setq str (consult-web--highlight-match match-str str t)))))
+    str))
+
 (defvar consult-web-wikipedia-search-url "https://www.wikipedia.org/search-redirect.php")
 (defvar consult-web-wikipedia-url "https://wikipedia.org/")
 (defvar consult-web-wikipedia-api-url "https://wikipedia.org/w/api.php")
@@ -51,36 +87,26 @@
       :callback
       (lambda (attrs)
         (when-let* ((raw-results (map-nested-elt attrs '("query" "search")))
-                    (titles  (mapcar (lambda (item) (format "%s" (gethash "title" item))) raw-results))
                     (annotated-results
                      (mapcar (lambda (item)
                                (let*
                                    ((source "Wikipedia")
-                                    (url (concat consult-web-wikipedia-url "wiki/" (string-replace " " "_" item)))
-                                    (title (format "%s" item))
-                                    (title (and (stringp title)
-                                                (propertize title 'face 'consult-web-engine-source-face)))
-                                    (urlobj (and url (url-generic-parse-url url)))
-                                    (domain (and (url-p urlobj) (url-domain urlobj)))
-                                    (domain (and (stringp domain)
-                                                 (propertize domain 'face 'font-lock-variable-name-face)))
-                                    (path (and (url-p urlobj) (url-filename urlobj)))
-                                    (path (and (stringp path)
-                                               (propertize path 'face 'font-lock-warning-face)))
+                                    (title (format "%s" (gethash "title" item)))
+                                    (url (concat consult-web-wikipedia-url "wiki/" (string-replace " " "_" title)))
+                                    (date (gethash "timestamp" item))
+                                    (date (format-time-string "%Y-%m-%d" (date-to-time date)))
+                                    (snippet (replace-regexp-in-string "<span.*/span>" "" (format "%s" (gethash "snippet" item))))
                                     (search-url (concat  consult-web-wikipedia-search-url "?" "search=" query))
-
-                                    (decorated (concat title "\t"
-                                                       (propertize " " 'display '(space :align-to center))
-                                                       domain path " "
-                                                       )))
+                                    (decorated (consult-web--wikipedia-format-candidate :source source :query query :url url :search-url search-url :title title :snippet snippet :face 'consult-web-engine-source-face :date date)))
                                  (propertize decorated
                                              :source source
                                              :title title
                                              :url url
                                              :search-url search-url
-                                             :query query)))
+                                             :query query
+                                             :date date)))
 
-                             titles)))
+                             raw-results)))
           (funcall callback annotated-results)
           annotated-results)))))
 

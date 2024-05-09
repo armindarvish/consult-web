@@ -116,7 +116,7 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
                                                           (snippet (string-trim (format "%s" (gethash "snippet" item))))
                                                           (search-url (consult-web--make-url-string consult-web-google-search-url params '("key" "cx" "gl")))
 
-                                                          (decorated (consult-web--google-format-candidate source query url search-url title snippet)))
+                                                          (decorated (funcall consult-web-default-format-candidate :source source :query query :url url :search-url search-url :title title :snippet snippet :face 'consult-web-engine-source-face)))
                                                        (propertize decorated
                                                                    :source source
                                                                    :title title
@@ -135,7 +135,6 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
                            :narrow-char ?g
                            :type 'async
                            :face 'consult-web-engine-source-face
-                           :format #'consult-web--google-format-candidate
                            :request #'consult-web--google-fetch-results
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history

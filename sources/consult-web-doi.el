@@ -25,19 +25,18 @@
   (let ((out))
     (let* ((doi (if doi (format "%s" doi)))
            (url (concat consult-web-doiorg-api-url doi)))
-      (consult-web--url-response-body
        (consult-web--fetch-url url consult-web-http-retrieve-backend
                                :sync t
                                :encoding 'utf-8
                                :parser #'consult-web--default-url-parse-buffer
                                :callback
                                (lambda (attrs)
-                                 (when-let* ((raw-results (map-nested-elt attrs '("values")))
-                                             (result (car-safe (remove nil (mapcar (lambda (item)
+                                 (let* ((raw-results (map-nested-elt attrs '("values")))
+                                        (result (car-safe (remove nil (mapcar (lambda (item)
                                                                                      (if-let* ((type (gethash "type" item))                                                                                                        (link (if (equal type "URL") (map-nested-elt item '("data" "value")))))
                                                                                          link))
                                                                                    raw-results)))))
-                                   result)))))))
+                                  result))))))
 
 
 (cl-defun consult-web--doiorg-fetch-results (input &rest args &key callback &allow-other-keys)
@@ -45,34 +44,19 @@
 "
   (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
                (opts (car-safe opts))
-               (url (consult-web--doi-to-url query)))
-    (if url
-        (let* ((source "doiorg")
+               (source "doiorg")
+               (url (consult-web--doi-to-url query))
                (title (format "%s" query))
-               (title (and (stringp title)
-                           (propertize title 'face 'consult-web-engine-source-face)))
-               (urlobj (and url (url-generic-parse-url url)))
-               (domain (and (url-p urlobj) (url-domain urlobj)))
-               (domain (and (stringp domain)
-                            (propertize domain 'face 'font-lock-variable-name-face)))
-               (path (and (url-p urlobj) (url-filename urlobj)))
-               (path (and (stringp path)
-                          (propertize path 'face 'font-lock-warning-face)))
                (search-url (concat consult-web-doiorg-search-url query))
-               (decorated (concat title "\t"
-                                             (propertize " " 'display '(space :align-to center))
-                                             domain path " "
-                                             ))
+               (decorated (funcall consult-web-default-format-candidate :source source :query query :url url :search-url search-url :title title :face 'link))
                (annotated-results (propertize decorated
                                               :source source
                                               :title title
                                               :url url
                                               :search-url search-url
                                               :query query)))
-
-          (funcall callback (list annotated-results))
-          annotated-results
-          ))))
+    (list annotated-results)
+          ))
 
 
 (defvar consult-web--doi-search-history (list)
@@ -86,8 +70,7 @@
 
 (consult-web-define-source "doiorg"
                            :narrow-char ?d
-                           :type 'async
-                           :face 'link
+                           :type 'sync
                            :request #'consult-web--doiorg-fetch-results
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--doi-search-history

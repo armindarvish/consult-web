@@ -139,7 +139,6 @@ Uses `elfeed-show-entry'."
                            :type 'sync
                            :face 'elfeed-search-unread-title-face
                            :request #'consult-web--elfeed-fetch-results
-                           :format #'consult-web--elfeed-format-candidate
                            :on-preview #'consult-web--elfeed-preview
                            :on-return #'identity
                            :on-callback #'consult-web--elfeed-preview

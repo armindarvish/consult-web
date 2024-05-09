@@ -3264,7 +3264,7 @@ TABLE is a hashtable from `consult-web--line-multi-fetch-results'."
 
 **** duckduckgo limited API
 #+begin_src emacs-lisp
-(defvar consult-web-duckduckgoapi-url "http://api.duckduckgoapi.com/")
+(defvar consult-web-duckduckgoapi-url "http://api.duckduckgo.com/")
 
 (cl-defun consult-web--duckduckgoapi-fetch-results (input &rest args &key count page &allow-other-keys)
   "Fetch search results got INPUT from DuckDuckGo limited API."
