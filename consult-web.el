@@ -1031,21 +1031,6 @@ For more info on annotation refer to `consult' manual, particularly 'consult--re
       (concat (if url (format "\s%s" url)) (if source (format "\t%s" source)) (if snippet (format "\s\s%s" snippet)) (if extra-args (format "\t%s" extra-args)))
     ))
 
-;; (defun consult-web--group-function (group-by cand transform)
-;;   "Group candidates by GROUP-BY keyword.
-
-;; This is passed as GROUP to `consult--read' on candidates and is used to define the grouping for CAND. "
-;;   (let* ((group-by (or consult-web--override-group-by group-by consult-web-group-by))
-;;          (group-by (if (not (keywordp group-by)) (intern (concat ":" (format "%s" group-by))) group-by))
-;;          (name (or (if group-by (get-text-property 0 group-by cand) "N/A"))))
-;;     (cond
-;;      ((equal group-by :domain)
-;;       (when-let* ((url (get-text-property 0 :url cand))
-;;                   (urlobj (if url (url-generic-parse-url url) nil))
-;;                   (domain (if (url-p urlobj) (url-domain urlobj))))
-;;         (setq name domain))))
-;;   (if transform (substring cand) name)))
-
 (defun consult-web--group-function (sources cand transform &optional group-by)
   "Group candidates by GROUP-BY keyword.
 
@@ -1064,7 +1049,7 @@ This is passed as GROUP to `consult--read' on candidates and is used to define t
         nil)
        (group-by
         (if-let ((group (get-text-property 0 group-by cand)))
-            group
+            (format "%s" group)
           "N/A"))
        (t
         (if-let* ((source (plist-get (consult--multi-source sources cand) :name)))
