@@ -21,6 +21,7 @@
       (list 'consult-web-bing
             'consult-web-brave-autosuggest
             'consult-web-brave
+            'consult-web-browser-history
             'consult-web-buffer
             'consult-web-chatgpt
             'consult-web-doi
