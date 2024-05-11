@@ -1581,7 +1581,7 @@ This is used to make docstring for function made by `consult-web-define-source'.
   (concat "consult-web's " (if dynamic "dynamic ") (format "interactive command to search %s."
                                                              (capitalize source-name))))
 
-(defun consult-web--make-source-list (source-name request format annotate face narrow-char state preview-key category lookup group sort enabled predicate selection-history)
+(defun consult-web--make-source-list (source-name request annotate face narrow-char state preview-key category lookup group sort enabled predicate selection-history)
   "Internal function to make a source for `consult--multi'.
 
 Do not use this function directly, use `consult-web-define-source' macro
@@ -1619,7 +1619,7 @@ instead."
           ,(when predicate predicate)
           ))
 
-(defun consult-web--call-static-command (input no-callback args request format face state source-name category lookup selection-history-var annotate preview-key sort)
+(defun consult-web--call-static-command (input no-callback args request face state source-name category lookup selection-history-var annotate preview-key sort)
   "Internal function to make static `consult--read' command.
 
 Do not use this function directly, use `consult-web-define-source' macro
@@ -1696,8 +1696,6 @@ Keyword     Type            Explanation
 TYPE        (sync|async)    Whether the source is synchronous or asynchronous
 
 REQUEST     (function)      Fetch results from source
-
-FORMAT      (function)      Formats a single candidate
 
 ON-PREVIEW  (function)      Preview action in `consult--read'
 
@@ -1818,7 +1816,7 @@ variable that this macro creates for %s=SOURCE-NAME.
   `(progn
 
      ;; make a variable called consult-web--source-%s (%s=source-name)
-     (defvar ,(consult-web--source-name source-name) (consult-web--make-source-list ,source-name ,request ,format ,annotate ,face ,narrow-char ,state ,preview-key ,category ,lookup ,group ,sort ,enabled ,predicate ,selection-history))
+     (defvar ,(consult-web--source-name source-name) (consult-web--make-source-list ,source-name ,request ,annotate ,face ,narrow-char ,state ,preview-key ,category ,lookup ,group ,sort ,enabled ,predicate ,selection-history))
 
       ;; make a dynamic interactive command consult-web-dynamic-%s (%s=source-name)
      (if ,dynamic
@@ -1833,7 +1831,7 @@ variable that this macro creates for %s=SOURCE-NAME.
        (defun ,(consult-web--func-name source-name nil "-static") (&optional input no-callback &rest args)
          ,(or docstring (consult-web--func-generate-docstring source-name))
          (interactive "P")
-         (consult-web--call-static-command input no-callback args ,request ,format ,face ,state ,source-name ,category ,lookup ,selection-history ,annotate ,preview-key ,sort)
+         (consult-web--call-static-command input no-callback args ,request ,face ,state ,source-name ,category ,lookup ,selection-history ,annotate ,preview-key ,sort)
          ))
 
      ;; add source to consult-web-sources-alist
@@ -1896,7 +1894,7 @@ DOCSTRING is the docstring for the function that is returned."
                               :search-url nil
                               ))) results)))))))
 
-(cl-defun consult-web--make-source-from-consult-source (consult-source &rest args &key type request format on-preview on-return state on-callback group narrow-char category dynamic search-history selection-history face annotate enabled sort predicate preview-key docstring &allow-other-keys)
+(cl-defun consult-web--make-source-from-consult-source (consult-source &rest args &key type request on-preview on-return state on-callback group narrow-char category dynamic search-history selection-history face annotate enabled sort predicate preview-key docstring &allow-other-keys)
 "Makes a consult-web source from a consult source, CONSULT-SOURCE.
 
 All othe input variables are passed to `consult-web-define-source'
