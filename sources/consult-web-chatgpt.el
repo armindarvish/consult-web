@@ -125,7 +125,6 @@ See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/i
                            :type 'async
                            :face 'consult-web-ai-source-face
                            :request #'consult-web--chatgpt-fetch-results
-                           :format #'consult-web-dynamic--chatgpt-format-candidate
                            :preview-key consult-web-preview-key
                            :on-preview #'consult-web--chatgpt-preview
                            :on-return #'identity

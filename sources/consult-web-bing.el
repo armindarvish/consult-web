@@ -80,7 +80,6 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
                            :narrow-char ?m
                            :type 'async
                            :face 'consult-web-engine-source-face
-                           :format #'consult-web--bing-format-candidate
                            :request #'consult-web--bing-fetch-results
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history

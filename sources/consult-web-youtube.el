@@ -156,7 +156,6 @@ for details"
                            :category 'consult-web-video
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--youtube-fetch-results
-                           :format #'consult-web--youtube-format-candidate
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history

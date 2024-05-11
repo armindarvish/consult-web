@@ -154,7 +154,6 @@ metadata so it can be send to `gptel'."
                            :narrow-char ?G
                            :type 'sync
                            :face 'consult-web-ai-source-face
-                           :format #'consult-web-dynamic--gptel-format-candidate
                            :request #'consult-web--gptel-fetch-results
                            :on-preview #'consult-web--gptelbuffer-preview
                            :on-return #'identity
