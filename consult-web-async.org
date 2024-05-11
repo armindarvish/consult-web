@@ -2779,7 +2779,6 @@ See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/i
                            :type 'async
                            :face 'consult-web-ai-source-face
                            :request #'consult-web--chatgpt-fetch-results
-                           :format #'consult-web-dynamic--chatgpt-format-candidate
                            :preview-key consult-web-preview-key
                            :on-preview #'consult-web--chatgpt-preview
                            :on-return #'identity
@@ -2896,7 +2895,6 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
                            :narrow-char ?m
                            :type 'async
                            :face 'consult-web-engine-source-face
-                           :format #'consult-web--bing-format-candidate
                            :request #'consult-web--bing-fetch-results
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
@@ -4303,7 +4301,6 @@ metadata so it can be send to `gptel'."
                            :narrow-char ?G
                            :type 'sync
                            :face 'consult-web-ai-source-face
-                           :format #'consult-web-dynamic--gptel-format-candidate
                            :request #'consult-web--gptel-fetch-results
                            :on-preview #'consult-web--gptelbuffer-preview
                            :on-return #'identity
@@ -5308,7 +5305,6 @@ for details"
                            :category 'consult-web-video
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--youtube-fetch-results
-                           :format #'consult-web--youtube-format-candidate
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
