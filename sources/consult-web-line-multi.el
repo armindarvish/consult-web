@@ -44,9 +44,17 @@
     annotated-results))
 
 (cl-defun consult-web--line-multi-format-candidate (&rest args &key source query marker title face &allow-other-keys)
-  "Returns a formatted string for candidates of `consult-web-dynamic-line-multi'.
+  "Formats the cnaiddates of `consult-web-line-multi'.
 
-TABLE is a hashtable from `consult-web--line-multi-fetch-results'."
+SOURCE is the name to use (e.g. “Line MUlti”)
+
+QUERY is the query input from the user
+
+MARKER is the marker pointing to results of line multi search
+
+TITLE is the title of the candidate (e.g. line text)
+
+FACE is the face to apply to TITLE"
   (let* ((source (if (stringp source) (propertize source 'face 'consult-web-source-face)))
          (marker (car marker))
          (buff (marker-buffer marker))

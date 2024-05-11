@@ -122,8 +122,7 @@ The preview buffer is from `consult-web--gptel-response-preview'."
   "Makes cnaidate with INPUT as placeholder for `consult-web-gptel'.
 
 This makes a placeholder string “ask gptel: %s” %s=INPUT with
-metadata MODEL and BACKEND as text properties, so it can be send to
-`gptel'."
+metadata so it can be send to `gptel'."
   (unless (featurep 'gptel)
     (error "consult-web: gptel is not available. Make sure to install and load `gptel'."))
   (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))

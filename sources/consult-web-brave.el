@@ -30,7 +30,8 @@ See URL `https://brave.com/search/api/' for more info"
 
 
 (cl-defun consult-web--brave-fetch-results (input &rest args &key callback &allow-other-keys)
-  ""
+  "Retrieve search results from Brave for INPUT.
+"
   (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
                (opts (car-safe opts))
                (count (plist-get opts :count))
@@ -42,19 +43,18 @@ See URL `https://brave.com/search/api/' for more info"
                          (and page (string-to-number (format "%s" page)))
                          consult-web-default-page))
                (count (min (max count 1) 20))
-               (params `(("q" . ,(url-hexify-string query))
+               (params `(("q" . ,(replace-regexp-in-string " " "+" query))
                          ("count" . ,(format "%s" count))
                          ("page" . ,(format "%s" page))))
                (headers `(("User-Agent" . "Emacs:consult-web/0.1 (Emacs consult-web package; https://github.com/armindarvish/consult-web)")
                           ("Accept" . "application/json")
                           ("Accept-Encoding" . "gzip")
-                          ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-api-key))
-                          )))
+                          ("X-Subscription-Token" . ,(consult-web-expand-variable-function consult-web-brave-api-key)))))
     (consult-web--fetch-url consult-web-brave-url consult-web-http-retrieve-backend
       :encoding 'utf-8
       :params params
       :headers headers
-      :parser #'consult-web--default-url-parse-buffer
+      :parser #'consult-web--json-parse-buffer
       :callback
       (lambda (attrs)
         (when-let* ((raw-results (map-nested-elt attrs '("web" "results")))
@@ -74,11 +74,11 @@ See URL `https://brave.com/search/api/' for more info"
                                              :search-url search-url
                                              :query query
                                              :snippet snippet)))
-
                              raw-results)))
           (funcall callback annotated-results)
           annotated-results)))))
 
+;; Define the Brave Source
 (consult-web-define-source "Brave"
                            :narrow-char ?b
                            :type 'async

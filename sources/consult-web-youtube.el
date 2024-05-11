@@ -18,6 +18,20 @@
 
 (cl-defun consult-web--youtube-format-candidate (&rest args &key source query title snippet channeltitle date face &allow-other-keys)
 "Formats a candidate for `consult-web-youtube' commands.
+
+SOURCE is the name to use (e.g. “YouTube”)
+
+QUERY is the query input from the user
+
+TITLE is the title of the video
+
+SNIPPET is a string containing a snippet/description of the video
+
+DATE is the publish date of the video
+
+CHANNELTITLE is the name of the channel for the video
+
+FACE is the face to apply to TITLE
 "
   (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
          (source (propertize source 'face 'consult-web-source-face))
@@ -98,7 +112,7 @@ for details"
                             :encoding 'utf-8
                             :params params
                             :headers headers
-                            :parser #'consult-web--default-url-parse-buffer
+                            :parser #'consult-web--json-parse-buffer
                             :callback
                             (lambda (attrs)
                               (let* ((raw-results (gethash "items" attrs))
@@ -119,10 +133,7 @@ for details"
                                                      (search-url (consult-web--make-url-string consult-web-youtube-search-results-url `(("search_query" . ,query))))
                                                      (description (gethash "description" snippet))
 
-                                                     (decorated (consult-web--youtube-format-candidate :source source :query query :title title :snippet snippet :channeltitle channeltitle :date date))
-
-                                                     ;; (decorated (funcall consult-web-default-format-candidate :source source :query query :url url :search-url search-url :title title :snippet snippet :face 'consult-web-engine-source-face))
-                                                     )
+                                                     (decorated (consult-web--youtube-format-candidate :source source :query query :title title :snippet snippet :channeltitle channeltitle :date date)))
                                                 (propertize decorated
                                                             :source source
                                                             :title title

@@ -55,6 +55,7 @@
                )))
              ))))
 
+;; make consult-web sources from consult-notes sources
 (when consult-notes-org-headings-mode
   (consult-web--make-source-from-consult-source 'consult-notes-org-headings--source
                                                 :category 'file

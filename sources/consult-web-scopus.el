@@ -19,7 +19,27 @@
 (cl-defun consult-web--scopus-format-candidate (&rest args &key source query url search-url title authors date journal doi face &allow-other-keys)
   "Returns a formatted string for candidates of `consult-web-scopus'.
 
-TABLE is a hashtable from `consult-web--scopus-fetch-results'."
+SOURCE is the name to use (e.g. “PubMed”)
+
+QUERY is the query input from the user
+
+URL is the url of  candidate
+
+SEARCH-URL is the web search url
+(e.g. https://www.scopus.com/record/display.uri?&eid=%s)
+
+TITLE is the title of the result/paper (e.g. title of paper)
+
+AUTHORS are authors of the result/paper
+
+DATE is the publish date of the result/paper
+
+JOURNAL is the journal that the result/paper is published in
+
+DOI is doi of the result/paper
+
+FACE is the face to apply to TITLE
+"
   (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
          (source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
          (date (if (stringp date) (propertize date 'face 'consult-web-date-face) nil))
@@ -101,7 +121,7 @@ See URL `https://dev.elsevier.com/documentation/SCOPUSSearchAPI.wadl' for more i
                             :encoding 'utf-8
                             :params params
                             :headers headers
-                            :parser #'consult-web--default-url-parse-buffer
+                            :parser #'consult-web--json-parse-buffer
                             :callback
                             (lambda (attrs)
                               (when-let* ((raw-results (map-nested-elt attrs '("search-results" "entry")))

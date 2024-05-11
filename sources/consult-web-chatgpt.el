@@ -19,7 +19,16 @@
 (defun consult-web-dynamic--chatgpt-format-candidate (source query title &optional model face)
   "Returns a formatted string for candidates of `consult-web-chatgpt'.
 
-TABLE is a hashtable from `consult-web--chatgpt-fetch-results'."
+SOURCE is the name to use (e.g. “chatgPT”)
+
+QUERY is the query input from the user
+
+TITLE is the title of the candidate (e.g. response from chatgpt)
+
+MODEL is the model used
+
+FACE is the face to apply to TITLE
+"
   (let* ((source (if (stringp source) (propertize source 'face 'consult-web-source-face)))
          (title-str (consult-web--set-string-width title (floor (* (frame-width) 0.4))))
          (title-str (propertize title-str 'face (or face 'consult-web-ai-source-face)))
@@ -91,7 +100,7 @@ See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/i
       :data  (json-encode `((model . ,model)
                     (messages . [((role . "user")
                                   (content . ,query))])))
-      :parser #'consult-web--default-url-parse-buffer
+      :parser #'consult-web--json-parse-buffer
       :callback
       (lambda (attrs)
         (let* ((source "chatGPT")

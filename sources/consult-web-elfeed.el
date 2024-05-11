@@ -27,6 +27,10 @@
   :type 'string)
 
 (defun consult-web--elfeed-format-candidate (entries query)
+"Formats the cnaiddates of `consult-web-elfeed'.
+
+ENTRIES are entries from `consult-web--elfeed-fetch-result'.
+QUERY is the query input from the user"
   (let ((annotated-entries))
     (dolist (entry entries annotated-entries)
       (let* ((url (elfeed-entry-link entry))

@@ -45,7 +45,7 @@ for some limited documentation"
                             :encoding 'utf-8
                             :params params
                             :headers headers
-                            :parser #'consult-web--default-url-parse-buffer
+                            :parser #'consult-web--json-parse-buffer
                             :callback
                             (lambda (attrs)
                               (let* ((raw-results (gethash "RelatedTopics" attrs))

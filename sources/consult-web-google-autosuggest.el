@@ -38,7 +38,7 @@ Uses `consult-web-google-autosuggest-api-url' as autosuggest api url."
     (consult-web--fetch-url consult-web-google-autosuggest-api-url consult-web-http-retrieve-backend
                             :params params
                             :headers headers
-                            :parser #'consult-web--default-url-parse-buffer
+                            :parser #'consult-web--json-parse-buffer
                             :callback
                             (lambda (attrs)
                               (when-let* ((raw-results (append (list (car-safe attrs)) (car-safe (cdr-safe attrs))))

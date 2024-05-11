@@ -27,7 +27,8 @@ See URL `https://brave.com/search/api/' for more info"
                  (function :tag "Custom Function")))
 
 (cl-defun consult-web--brave-autosuggest-fetch-results (input &rest args &key callback &allow-other-keys)
-  ""
+  "Fetch search results for INPUT from Brave Autosuggest API.
+"
   (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
                (opts (car-safe opts))
                (count (plist-get opts :count))
@@ -51,7 +52,7 @@ See URL `https://brave.com/search/api/' for more info"
     (consult-web--fetch-url consult-web-brave-autosuggest-api-url consult-web-http-retrieve-backend
                                   :params params
                                   :headers headers
-                                  :parser #'consult-web--default-url-parse-buffer
+                                  :parser #'consult-web--json-parse-buffer
                                   :callback
                                   (lambda (attrs)
                                     (when-let* ((original (make-hash-table :test 'equal))

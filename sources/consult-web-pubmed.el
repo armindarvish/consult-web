@@ -32,8 +32,6 @@ See URL `https://www.ncbi.nlm.nih.gov/books/NBK25501/' for more info"
 (cl-defun consult-web--pubmed-esearch-fetch-results (input &rest args &key db &allow-other-keys)
   "Fetches “esearch” results for INPUT from PubMed Entrez Utilities service.
 
-COUNT is passed as retmax in query parameters.
-(* PAGE COUNT) is passed as retstart in query paramters.
 DB is passed as db in query parameters. (This is the databes to search.)
 
 Refer to URL `https://www.ncbi.nlm.nih.gov/books/NBK25501/'
@@ -67,7 +65,7 @@ for more info."
      :sync t
      :params params
      :headers headers
-     :parser #'consult-web--default-url-parse-buffer
+     :parser #'consult-web--json-parse-buffer
      :callback
      (lambda (attrs)
        (let* ((results (gethash "esearchresult" attrs))
@@ -81,10 +79,12 @@ for more info."
 (defvar consult-web-pubmed-esummary-api-url "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi")
 
 (cl-defun consult-web--pubmed-esummary-fetch-results (input &rest args &key callback webenv qk db &allow-other-keys)
-  "Fetches “esearch” results for INPUT from PubMed Entrez Utilities service.
+  "Fetches “esummary” results for INPUT from PubMed Entrez Utilities service.
 
-COUNT is passed as retmax in query parameters.
-(* PAGE COUNT) is passed as retstart in query paramters.
+WEBENV is passed as webenv in query parameters
+
+qk is passed as qk in query parameters
+
 DB is passed as db in query parameters. (This is the databes to search.)
 
 Refer to URL `https://www.ncbi.nlm.nih.gov/books/NBK25501/'
@@ -120,7 +120,7 @@ for more info."
                             :encoding 'utf-8
                             :params params
                             :headers headers
-                            :parser #'consult-web--default-url-parse-buffer
+                            :parser #'consult-web--json-parse-buffer
                             :callback
                             (lambda (attrs)
                               (let* ((results (gethash "result" attrs))
@@ -160,7 +160,27 @@ for more info."
 (cl-defun consult-web-dynamic--pubmed-format-candidate (&rest args &key source query url search-url title authors date journal doi face &allow-other-keys)
   "Returns a formatted string for candidates of `consult-web-pubmed'.
 
-TABLE is a hashtable from `consult-web--pubmed-fetch-results'."
+SOURCE is the name to use (e.g. “PubMed”)
+
+QUERY is the query input from the user
+
+URL is the url of  candidate
+
+SEARCH-URL is the web search url
+(e.g. https://pubmed.ncbi.nlm.nih.gov/?term=QUERY)
+
+TITLE is the title of the result/paper (e.g. title of paper)
+
+AUTHORS are authors of the result/paper
+
+DATE is the publish date of the result/paper
+
+JOURNAL is the journal that the result/paper is published in
+
+DOI is doi of the result/paper
+
+FACE is the face to apply to TITLE
+"
   (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
          (source (if (stringp source) (propertize source 'face 'consult-web-source-face) nil))
          (date (if (stringp date) (propertize date 'face 'consult-web-date-face) nil))
@@ -192,12 +212,8 @@ TABLE is a hashtable from `consult-web--pubmed-fetch-results'."
     str))
 
 (cl-defun consult-web--pubmed-fetch-results (input &rest args &key callback &allow-other-keys)
-  "Fetches results for INPUT from PubMed using Entrez Utilities
-service.
-
-COUNT and PAGE are passed to `consult-web--pubmed-esearch-fetch-results' and `consult-web--pubmed-esummary-fetch-results'.
-
-DATABASE is passed as DB to `consult-web--pubmed-esearch-fetch-results' and `consult-web--pubmed-esummary-fetch-results'."
+  "Fetches results for INPUT from PubMed using Entrez Utilities service.
+"
 (let* ((esearch (consult-web--pubmed-esearch-fetch-results input))
        (webenv (plist-get esearch :webenv))
        (qk (plist-get esearch :qk)))

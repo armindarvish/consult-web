@@ -24,6 +24,7 @@
           (consult--buffer-action buff))
         )))
 
+;; make consult-web sources from `consult-buffer-sources'
 (cl-loop for source in consult-buffer-sources
          do (if (symbolp source) (consult-web--make-source-from-consult-source source
                                               :type 'sync

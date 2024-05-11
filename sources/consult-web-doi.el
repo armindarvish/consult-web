@@ -28,7 +28,7 @@
        (consult-web--fetch-url url consult-web-http-retrieve-backend
                                :sync t
                                :encoding 'utf-8
-                               :parser #'consult-web--default-url-parse-buffer
+                               :parser #'consult-web--json-parse-buffer
                                :callback
                                (lambda (attrs)
                                  (let* ((raw-results (map-nested-elt attrs '("values")))

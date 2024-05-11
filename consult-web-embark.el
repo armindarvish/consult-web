@@ -134,7 +134,7 @@ Gets the preview function from `consult-web-sources-alist'."
     ))
 
 (defvar-keymap consult-web-embark-scholar-actions-map
-  :doc "Keymap for consult-web-embark"
+  :doc "Keymap for consult-web-embark-scholar"
   :parent consult-web-embark-general-actions-map
   "o d" #'consult-web-embark-scholar-external-browse-doi
   "w a" #'consult-web-embark-scholar-copy-authors-as-kill
@@ -148,7 +148,7 @@ Gets the preview function from `consult-web-sources-alist'."
 
 
 (defvar-keymap consult-web-embark-video-actions-map
-  :doc "Keymap for consult-web-embark"
+  :doc "Keymap for consult-web-embark-video"
   :parent consult-web-embark-general-actions-map
   )
 

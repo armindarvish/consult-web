@@ -25,8 +25,8 @@ QUERY is the query string used for searching
 
 URL is a string pointing to url of the candidate
 
-SEARCH-URL is a string pointing to the url for
-the search results of QUERY on the SOURCE website
+SEARCH-URL is the web search url e.g.:
+https://www.wikipedia.org/search-redirect.php?search=query
 
 TITLE is the title of the candidate
 
@@ -58,17 +58,21 @@ SNIPPET is a string containing a snippet/description of candidate
 (defvar consult-web-wikipedia-api-url "https://wikipedia.org/w/api.php")
 
 (cl-defun consult-web--wikipedia-fetch-results (input &rest args &key callback &allow-other-keys)
-  ""
+  "Fetches search results from Wikipedia for INPUT.
+"
+
   (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (page (plist-get opts :page))
+               (print count)
                (count (or (and (integerp count) count)
                           (and count (string-to-number (format "%s" count)))
                           consult-web-default-count))
                (page (or (and (integerp page) page)
                          (and page (string-to-number (format "%s" page)))
                          consult-web-default-page))
+               (count (max count 1))
                (params `(("action" . "query")
                  ("format" . "json")
                  ("list" . "search")
@@ -84,7 +88,7 @@ SNIPPET is a string containing a snippet/description of candidate
       :encoding 'utf-8
       :params params
       :headers headers
-      :parser #'consult-web--default-url-parse-buffer
+      :parser #'consult-web--json-parse-buffer
       :callback
       (lambda (attrs)
         (when-let* ((raw-results (map-nested-elt attrs '("query" "search")))
