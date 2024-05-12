@@ -17,6 +17,48 @@
 (require 'consult-web)
 (require 'browser-hist nil t)
 
+(cl-defun consult-web--browser-history-format-candidate (&rest args &key source query url search-url title face &allow-other-keys)
+  "Returns a highlighted formatted string for candidates.
+
+SOURCE is the name string of the source for candidate
+
+QUERY is the query string used for searching
+
+URL is a string pointing to url of the candidate
+
+SEARCH-URL is a string pointing to the url for
+the search results of QUERY on the SOURCE website
+
+TITLE is the title of the candidate
+
+SNIPPET is a string containing a snippet/description of candidate
+"
+  (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+         (source (and (stringp source) (propertize source 'face 'consult-web-source-face)))
+         (match-str (and (stringp query) (consult--split-escaped query) nil))
+         (face (or (consult-web--get-source-prop source :face) face 'consult-web-default-face))
+         (title-str (propertize title 'face face))
+         (title-str (consult-web--set-string-width title-str (* 4 frame-width-percent)))
+         (urlobj (and url (url-generic-parse-url url)))
+         (domain (and (url-p urlobj) (url-domain urlobj)))
+         (domain (and (url-p urlobj) (or (url-domain urlobj) (url-host urlobj))))
+         (port (and (url-p urlobj) (url-port urlobj)))
+         (domain (if port (format "%s:%s" domain port) (format "%s" domain)))
+         (domain (and (stringp domain) (propertize domain 'face 'consult-web-domain-face)))
+         (path (and (url-p urlobj) (url-filename urlobj)))
+         (path (and (stringp path) (propertize path 'face 'consult-web-path-face)))
+         (url-str (consult-web--set-url-width domain path (* frame-width-percent 5)))
+         (str (concat title-str
+                      (when url-str (concat "\s" url-str))
+                      (when source (concat "\t" source)))))
+    (if consult-web-highlight-matches
+        (cond
+         ((listp match-str)
+          (mapcar (lambda (match) (setq str (consult-web--highlight-match match str t))) match-str))
+         ((stringp match-str)
+          (setq str (consult-web--highlight-match match-str str t)))))
+    str))
+
 (cl-defun consult-web--browser-history-fetch-results (input &rest args &key callback &allow-other-keys)
   "Fetch search results for INPUT from browser history.
 "
@@ -29,7 +71,7 @@
       (mapcar (lambda (item)
                 (let* ((url (car-safe item))
                       (title (cdr-safe item))
-                      (decorated (funcall consult-web-default-format-candidate :source source :query query :url url :title title)))
+                      (decorated (consult-web--browser-history-format-candidate :source source :query query :url url :title title)))
                   (propertize decorated
                               :source source
                               :title title
