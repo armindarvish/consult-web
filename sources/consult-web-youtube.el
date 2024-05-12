@@ -103,7 +103,7 @@ COUNT is passed as num in query parameters.
          (headers `(("Accept" . "application/json")
                     ("Accept-Encoding" . "gzip")
                     ("User-Agent" . "consult-web (gzip)")
-                    ("X-Goog-Api-Key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key ))))
+                    ("X-Goog-Api-Key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key )))))
     (funcall consult-web-retrieve-backend
      consult-web-youtube-search-api-url
      :params params
