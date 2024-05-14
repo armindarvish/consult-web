@@ -16,7 +16,7 @@
 
 (require 'consult-web)
 
-(cl-defun consult-web--youtube-format-candidate (&rest args &key source query title snippet channeltitle date face &allow-other-keys)
+(cl-defun consult-web--youtube-format-candidate (&rest args &key source type query title snippet channeltitle date length subcount videocount viewcount face &allow-other-keys)
 "Formats a candidate for `consult-web-youtube' commands.
 
 SOURCE is the name to use (e.g. “YouTube”)
@@ -38,14 +38,35 @@ FACE is the face to apply to TITLE
          (match-str (if (stringp query) (consult--split-escaped query) nil))
          (date (and (stringp date) (propertize date 'face 'consult-web-date-face)))
          (channeltitle (and (stringp channeltitle) (propertize channeltitle 'face 'consult-web-path-face)))
+         (channeltitle (consult-web--set-string-width channeltitle (* 2 frame-width-percent)))
          (snippet (if (stringp snippet) (consult-web--set-string-width snippet (* 2 frame-width-percent))))
-         (snippet (and (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
+         (snippet (and snippet (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
+         (videocount-str (and videocount (consult-web--numbers-human-readable (or videocount 0) "videos")))
+         (viewcount-str (and viewcount (consult-web--numbers-human-readable (or viewcount 0) "views")))
+         (subcount-str (and subcount (consult-web--numbers-human-readable (or subcount 0) "subs")))
+         (stats (and type
+                    (stringp type)
+                    (propertize
+                     (consult-web--set-string-width (pcase type
+                      ("video" (format "%s" (or viewcount-str "0 views")))
+                      ("playlist" (format "%s" (or videocount-str "0 videos")))
+                      ("channel" (format "%s" (or subcount-str "0 subscriptions")))
+                      (_ "")) 10)
+                     'face 'consult-web-domain-face)))
+         (length (or
+                  (and (numberp length) length)
+                  (and (equal type "playlist") "[PLAYLIST]")
+                  (and (equal type "channel") "(CHANNEL)")))
+         (length (and (stringp length) (consult-web--set-string-width (propertize length 'face 'consult-web-comment-face) 10)))
+
          (face (or (consult-web--get-source-prop source :face) face 'consult-web-default-face))
          (title-str (propertize title 'face face))
-         (title-str (consult-web--set-string-width title-str (* 6 frame-width-percent)))
+         (title-str (consult-web--set-string-width title-str (* 5 frame-width-percent)))
          (str (concat title-str
                       (when date (concat "\s" date))
                       (when channeltitle (concat " " channeltitle))
+                      (when length (concat "\s" length))
+                      (unless (string-empty-p stats) (concat "\s" stats))
                       (when snippet (concat "\s\s" snippet))
                       (concat "\t" source)))
          )
@@ -84,7 +105,7 @@ for details"
                (def (plist-get opts :def))
                (type (plist-get opts :type))
                (vidtype (plist-get opts :vidtype))
-               (order (plist-get opts :order))
+               (order (or (plist-get opts :order) (plist-get opts :sort)))
                (count (or (and (integerp count) count)
                     (and count (string-to-number (format "%s" count)))
                     consult-web-default-count))
@@ -103,7 +124,9 @@ for details"
                          ("type" . ,type)
                          ("maxResults" . ,(format "%s" count))
                          ("videoDefinition" . ,def)
-                         ("videoType" . ,vidtype)))
+                         ("videoType" . ,vidtype)
+                         ("key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key))
+                         ))
                (headers `(("Accept" . "application/json")
                           ("Accept-Encoding" . "gzip")
                           ("User-Agent" . "consult-web (gzip)")
@@ -126,14 +149,14 @@ for details"
                                                      (channelid (gethash "channelId" snippet))
                                                      (title (gethash "title" snippet))
                                                      (date (gethash "publishedAt" snippet))
-                                                     (date (format-time-string "%Y-%m-%d %R" (date-to-time date)))
+                                                     (date (format-time-string "%Y-%m-%d" (date-to-time date)))
                                                      (url (cond
                                                            (videoid (consult-web--make-url-string consult-web-youtube-watch-url `(("v" . ,videoid))))
                                                            (channelid (concat consult-web-youtube-channel-url channelid))))
                                                      (search-url (consult-web--make-url-string consult-web-youtube-search-results-url `(("search_query" . ,query))))
                                                      (description (gethash "description" snippet))
 
-                                                     (decorated (consult-web--youtube-format-candidate :source source :query query :title title :snippet snippet :channeltitle channeltitle :date date)))
+                                                     (decorated (consult-web--youtube-format-candidate :source source :query query :title title :snippet description :channeltitle channeltitle :date date)))
                                                 (propertize decorated
                                                             :source source
                                                             :title title

@@ -65,7 +65,6 @@ SNIPPET is a string containing a snippet/description of candidate
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (page (plist-get opts :page))
-               (print count)
                (count (or (and (integerp count) count)
                           (and count (string-to-number (format "%s" count)))
                           consult-web-default-count))

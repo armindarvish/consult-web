@@ -331,7 +331,7 @@ This is used in dynamic collection to change grouping.")
 "The face for source annotation in minibuffer.")
 
 (defface consult-web-date-face
-  `((t :inherit 'font-lock-variable-face))
+  `((t :inherit 'font-lock-preprocessor-face))
 "The face for date annotation in minibuffer.")
 
 (defface consult-web-domain-face
@@ -344,6 +344,14 @@ This is used in dynamic collection to change grouping.")
 
 (defface consult-web-snippet-face
   `((t :inherit 'font-lock-doc-face))
+"The face for source annotation in minibuffer.")
+
+(defface consult-web-keyword-face
+  `((t :inherit 'font-lock-keyword-face))
+"The face for source annotation in minibuffer.")
+
+(defface consult-web-comment-face
+  `((t :inherit 'font-lock-comment-face))
 "The face for source annotation in minibuffer.")
 
 (defface consult-web-highlight-match-face
@@ -388,8 +396,11 @@ If ADD-POS is non-nil, it adds whitespace to the end of STRING.
         (setq string (format "%s%s" (substring string) (make-string (- width w) ?\s)))))
     (when (> w width)
       (if (and truncate-pos (< truncate-pos (- width 3)) (>= truncate-pos 0))
-          (setq string (format "%s%s%s" (substring string 0 truncate-pos) (consult-web-propertize-by-plist "..." (text-properties-at truncate-pos string)) (substring string (- 0 (- width truncate-pos 3)))))
-        (setq string (format "%s%s" (substring string 0 (- width 3)) (consult-web-propertize-by-plist "..." (text-properties-at (max (- width 3) 0) string))))))
+          (setq string (format "%s%s%s" (substring string 0 truncate-pos) (propertize (substring string truncate-pos (+ truncate-pos 3)) 'display "...") (substring string (- 0 (- width truncate-pos 3)))))
+        (setq string (format "%s%s"
+                             (substring string 0 (- width 3))
+                             (propertize  (substring string (- width 3) width) 'display "...")
+                             (propertize (substring string width) 'invisible t)))))
     string))
 
 (defun consult-web--justify-left (string prefix maxwidth)
@@ -477,6 +488,32 @@ if needed in formating candidates or preview buffers."
          (overlay-put o 'face 'consult-web-highlight-match-face))
       )
 ))))
+
+(defun consult-web--numbers-human-readable (number &optional unit separator base prefixes)
+  "Convert number to a human-redable string.
+
+SEPARATOR is a string placed between unmber and unit
+UNIT is a string used as unit
+BASE is the number base used to derive prefix
+PREFIXES is a list of chars for each magnitue
+(e.g. '(“” “K” “M” “G” ...) for none, kilo, mega, giga, ...
+"
+  (let* ((power (if (and base (numberp base)) (float base) 1000.0))
+	(prefixes (or prefixes '("" "k" "M" "G" "T" "P" "E" "Z" "Y" "R" "Q"))))
+    (while (and (>= number power) (cdr prefixes))
+      (setq number (/ number power)
+	    prefixes (cdr prefixes)))
+    (let* ((prefix (car-safe prefixes)))
+      (format (if (and (< number 10)
+                       (>= (mod number 1.0) 0.05)
+                       (< (mod number 1.0) 0.95))
+                  "%.1f%s%s%s"
+	        "%.0f%s%s%s")
+	      number
+              prefix
+              (or separator " ")
+              unit))
+    ))
 
 (defun consult-web--make-url-string (url params &optional ignore-keys)
 "Adds key value pairs in PARAMS to URL as “&key=val”.
@@ -596,7 +633,7 @@ and `consult-web-url-queue-timeout', respectively.
                    (url-queue-retrieve url-with-params
                                  (lambda (status &rest args)
                                    (let* ((parsed-data (condition-case nil
-                                                     (funcall parser)
+                                                     (if parser (funcall parser) (buffer-substring (point-min) (point-max)))
                                                    (error (funcall error)))))
                                      (setf response-data (plist-put response-data :status status))
                                      (when parsed-data
