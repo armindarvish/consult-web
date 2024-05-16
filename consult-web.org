@@ -3376,7 +3376,8 @@ MARKER is the marker pointing to results of line multi search
 TITLE is the title of the candidate (e.g. line text)
 
 FACE is the face to apply to TITLE"
-  (let* ((source (if (stringp source) (propertize source 'face 'consult-web-source-face)))
+  (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+         (source (if (stringp source) (propertize source 'face 'consult-web-source-face)))
          (marker (car marker))
          (buff (marker-buffer marker))
          (pos (marker-position marker))

@@ -1451,10 +1451,10 @@ POS and CATEGORY are the group ID and category for these items."
 
 (defun consult-web--multi-cancel ()
   (mapcar (lambda (proc) (when proc (delete-process (car proc))
-                               ;; (kill-buffer (cdr proc))
+                               (kill-buffer (cdr proc))
                                ))
           consult-web-async-processes)
-  ;; (setq consult-web-async-processes nil)
+  (setq consult-web-async-processes nil)
   (mapcar (lambda (timer) (when timer (cancel-timer timer))) consult-web-dynamic-timers)
   (setq consult-web-dynamic-timers nil)
   )
