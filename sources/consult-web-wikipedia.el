@@ -117,7 +117,7 @@ SNIPPET is a string containing a snippet/description of candidate
 
 (consult-web-define-source "Wikipedia"
                            :narrow-char ?w
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--wikipedia-fetch-results
                            :preview-key consult-web-preview-key
@@ -126,7 +126,7 @@ SNIPPET is a string containing a snippet/description of candidate
                            :enabled (lambda () (boundp  'consult-web-wikipedia-api-url))
                            :group #'consult-web--group-function
                            :sort t
-                           :type 'async
+                           :type 'dynamic
                            :dynamic 'both
                             )
 

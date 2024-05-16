@@ -296,6 +296,16 @@ This is used in dynamic collection to change grouping.")
   (rx (or "\r\n\r\n" "\n\n"))
   "Regular expression matching the end of HTTP headers.")
 
+(defvar consult-web-async-processes (list)
+  "List of processes for async candidates colleciton")
+
+
+(defvar consult-web-dynamic-timers (list)
+  "List of timers for dynamic candidates colleciton")
+
+(defvar consult-web--async-log-buffer " *consult-web--async-log*"
+ "name of buffer for logging async processes info")
+
 ;;; Faces
 
 (defface consult-web-default-face
@@ -549,7 +559,7 @@ Ommits keys in IGNORE-KEYS."
                  (funcall var)
     var))
 
-(defun consult-web--log (string)
+(defun consult-web--url-log (string)
   "Logs the response from `consult-web-url-retrieve-sync' in `consult-web-log-buffer-name'."
    (with-current-buffer (get-buffer-create consult-web-log-buffer-name)
      (goto-char (point-min))
@@ -655,9 +665,9 @@ and `consult-web-url-queue-timeout', respectively.
                 (when consult-web-log-level
                   (cond
                    ((eq consult-web-log-level 'info)
-                    (consult-web--log (format "URL: %s\nRESPONSE: %s" url response)))
+                    (consult-web--url-log (format "URL: %s\nRESPONSE: %s" url response)))
                    ((eq consult-web-log-level 'debug)
-                    (consult-web--log (format "URL: %s\n\nRESPONSE-HEADER:\n%s\n\nRESPONSE-BODY: %s\n" url header body)))))
+                    (consult-web--url-log (format "URL: %s\n\nRESPONSE-HEADER:\n%s\n\nRESPONSE-BODY: %s\n" url header body)))))
                 (setf response-data (plist-put response-data :status response))
                 (delete-region (point-min) (+ end-of-headers 1))
                 (goto-char (point-min))
@@ -835,6 +845,12 @@ and removes the buffers that are killed from the list."
     )
   (setq url-dead-buffer-list nil)
 )
+
+(defun consult-web--async-log (formatted &rest args)
+  "Log FORMATTED ARGS to variable `consult-web--async-log-buffer'."
+  (with-current-buffer (get-buffer-create consult-web--async-log-buffer)
+    (goto-char (point-max))
+    (insert (apply #'format formatted args))))
 
 (defun consult-web--get-source-prop (source prop)
 "Get PROP for SOURCE from `consult-web-sources-alist'."
@@ -1235,12 +1251,20 @@ the candidates for the sync source
 
 Returns the group string for candidate or transforms it
 for all the candidates given SOURCES."
-  (if transform cand
+  (if transform
+      cand
     (let* ((fun (and (plist-member (consult--multi-source sources cand) :group)
                      (plist-get (consult--multi-source sources cand) :group))))
       (cond
        ((functionp fun)
-        (funcall fun sources cand transform))
+        (let ((argnum (cdr (func-arity fun))))
+        (cond
+         ((or (stringp argnum) (and (numberp argnum) (> argnum 2)))
+              (funcall fun sources cand transform))
+         ((and (numberp argnum) (= argnum 2))
+          (funcall fun cand transform))
+         ((and (numberp argnum) (= argnum 1))
+          (funcall fun cand)))))
        ((stringp fun)
         fun)
        ((eq fun 'nil)
@@ -1308,251 +1332,221 @@ POS and CATEGORY are the group ID and category for these items."
           (funcall (eval fun) (cdr (get-text-property 0 'multi-category cand))))))
     ))
 
-;; (defun consult-web--multi-dynamic-candidates-update (async sources candidates input &rest args)
-;;   "Dynamically updates CANDIDATES for multiple SOURCES
+(defun consult-web--multi-update-sync-candidates (async source candidates idx action &rest args)
+  (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
+         (cat (plist-get source :category))
+         (fun (plist-get source :items))
+         (items))
+    (when (functionp fun)
+      (cond
+       ((and (integerp (cdr (func-arity fun))) (< (cdr (func-arity fun)) 1))
+        (setq items (funcall fun)))
+       (t
+        (setq items (funcall fun action args)))))
 
-;; ASYNC is the sink function
-;; SOURCES are sources
-;; CANDIDATES
-;; "
-;;     (let ((idx 0))
-;;       (seq-doseq (src sources)
-;;         (let* ((face (and (plist-member src :face) `(face ,(plist-get src :face))))
-;;                (name (plist-get src :name))
-;;                (cat (plist-get src :category))
-;;                (items (plist-get src :items))
-;;                (narrow (plist-get src :narrow))
-;;                (async-type (consult-web--get-source-prop name :type))
-;;                (narrow-type (or (car-safe narrow) narrow -1))
-;;                (err (if consult-web-log-level 'err nil))
-;;                (pos idx))
-;;           (when (or (eq consult--narrow narrow-type)
-;;                     (not (or consult--narrow (plist-get src :hidden))))
-;;             (condition-case err
-;;                 (progn
-;;                   (when (functionp items)
-;;                     (cond
-;;                      ((and (integerp (cdr (func-arity items))) (< (cdr (func-arity items)) 1))
-;;                       (setq items (funcall items))
-;;                       (aset candidates idx    ; sync source, refresh now
-;;                             (and items (consult-web--multi-propertize
-;;                                         items cat idx face)))
-;;                       (funcall async 'flush)
-;;                       (funcall async (delq nil (apply #'append  (append candidates nil))))
-;;                       )
-;;                      ((equal async-type 'sync)
-;;                       (setq items (funcall items input args))
-;;                       (aset candidates idx    ; sync source, refresh now
-;;                             (and items (consult-web--multi-propertize
-;;                                         items cat idx face)))
-;;                       (funcall async 'flush)
-;;                       (funcall async (delq nil (apply #'append  (append candidates nil))))
-;;                       )
-;;                      ((equal async-type 'async)
-;;                       (if input (funcall items input      ; async source, refresh in callback
-;;                                :callback (lambda (response-items)
-;;                                  (when response-items
-;;                                    (aset candidates pos
-;;                                          (consult-web--multi-propertize response-items cat pos face))
-;;                                    (funcall async 'flush)
-;;                                    (funcall async (delq nil (apply #'append  (append candidates nil))))
-;;                                    (funcall async 'refresh)
-;;                                    )) args)))
-;;                      (t
-;;                     (message "source %s needs a :type keyword. See the documentation for `consult-web-define-source'." name
-;;                    )))
-;;                     ))
-;;               ('excessive-lisp-nesting nil)
-;;               ('wrong-type-argument (message "error in calling :items of %s source - %s" name (error-message-string err)))
-;;               ('error
-;;                (message (if consult-web-log-level
-;;                             (format "error in calling :items of %s source - %s" name (error-message-string err))
-;;                           (format "error in calling :items of %s source" name)))
-;;              nil)
-;;               )))
-;;         (cl-incf idx))
-;;       (delq nil (apply #'append  (append candidates nil)))
-;;       ))
+    (aset candidates idx
+          (and items (consult-web--multi-propertize items cat idx face)))
+    (funcall async (aref candidates idx))
+    (funcall async 'refresh)
+))
 
+(defun consult-web--multi-update-dynamic-candidates (async source candidates idx action &rest args)
+  ;; (consult-web--dynamic-get-candidates async source candidates idx action)
+  (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
+         (cat (plist-get source :category))
+         (timer))
+    (funcall (plist-get source :items) action
+             :callback (lambda (response-items)
+                         (when response-items
+                           (aset candidates idx
+                                 (consult-web--multi-propertize response-items cat idx face))
+                           (funcall async (aref candidates idx))
+                           (funcall async 'refresh)
+                           )) args)
+    ))
 
-(defun consult-web--multi-dynamic-candidates-update (async sources input &rest args)
+(defun consult-web--multi-update-async-candidates (async source candidates idx action &rest args)
+  ""
+  (let* ((name (plist-get source :name))
+         (builder (plist-get source :items))
+         (transform (consult-web--get-source-prop name :transform))
+         (props (seq-drop-while (lambda (x) (not (keywordp x))) args))
+         (proc)
+         (proc-buf)
+         (count)
+         (face (and (plist-member source :face) `(face ,(plist-get source :face))))
+         (consult-web--async-log-buffer (concat " *consult-web-async-log--" name "*"))
+         (cat (plist-get source :category))
+         (query (car (consult-web--split-command action)))
+         )
+    (let* ((args (funcall builder action)))
+      (unless (stringp (car args))
+        (setq args (car args)))
+      (setq my:test1 args)
+      (when proc
+        (delete-process proc)
+        (kill-buffer proc-buf)
+        (setq proc nil proc-buf nil))
+      (when args
+        (let* ((rest "")
+               (proc-filter
+                (lambda (_ out)
+                  (let ((lines (split-string out "[\r\n]+")))
+                    (if (not (cdr lines))
+                        (setq rest (concat rest (car lines)))
+                      (setcar lines (concat rest (car lines)))
+                      (let* ((len (length lines))
+                             (last (nthcdr (- len 2) lines)))
+                        (setq rest (cadr last)
+                              count (+ count len -1))
+                        (setcdr last nil)
+                        (when lines
+                          (setq lines (mapcar (lambda (line) (propertize line :source name :title line :query query)) lines))
+                          (when transform (setq lines (funcall transform lines query)))
+                          (aset candidates idx
+                              (consult-web--multi-propertize lines cat idx face)))
+                        (funcall async (car (delq nil (append candidates nil))))
+                        (funcall async 'refresh)
+                        )))))
+               (proc-sentinel
+                (lambda (_ event)
+                  (funcall async 'indicator
+                           (cond
+                            ((string-prefix-p "killed" event)   'killed)
+                            ((string-prefix-p "finished" event) 'finished)
+                            (t 'failed)))
+                  (when (and (string-prefix-p "finished" event) (not (equal rest "")))
+                    (cl-incf count)
+                    (funcall async (list rest)))
+                  (consult-web--async-log
+                   "consult--async-process sentinel: event=%s lines=%d\n"
+                   (string-trim event) count)
+                  (when (> (buffer-size proc-buf) 0)
+                    (with-current-buffer (get-buffer-create consult-web--async-log-buffer)
+                      (goto-char (point-max))
+                      (insert ">>>>> stderr >>>>>\n")
+                      (let ((beg (point)))
+                        (insert-buffer-substring proc-buf)
+                        (save-excursion
+                          (goto-char beg)
+                          (message #("%s" 0 2 (face error))
+                                   (buffer-substring-no-properties (pos-bol) (pos-eol)))))
+                      (insert "<<<<< stderr <<<<<\n")))))
+               (process-adaptive-read-buffering nil))
+          (funcall async 'indicator 'running)
+          (consult-web--async-log "consult--async-process started %S\n" args)
+          (setq count 0
+                proc-buf (generate-new-buffer (concat " *consult-web-async-stderr-" name "*"))
+                proc (apply #'make-process
+                            `(,@props
+                              :connection-type pipe
+                              :name ,(car args)
+                              ;; :stderr ,proc-buf
+                              :process-buffer ,proc-buf
+                              :noquery t
+                              :command ,args
+                              :filter ,proc-filter
+                              :sentinel ,proc-sentinel))))))
+    (when proc (add-to-list 'consult-web-async-processes `(,proc . ,proc-buf)))))
+
+(defun consult-web--multi-cancel ()
+  (mapcar (lambda (proc) (when proc (delete-process (car proc))
+                               ;; (kill-buffer (cdr proc))
+                               ))
+          consult-web-async-processes)
+  ;; (setq consult-web-async-processes nil)
+  (mapcar (lambda (timer) (when timer (cancel-timer timer))) consult-web-dynamic-timers)
+  (setq consult-web-dynamic-timers nil)
+  )
+
+(defun consult-web--multi-update-candidates (async sources action &rest args)
   "Dynamically updates CANDIDATES for multiple SOURCES
 
 ASYNC is the sink function
 SOURCES are sources
 INPUT is the input string to pass to SOURCES
 "
-    (let ((candidates (make-vector (length sources) nil))
-          (idx 0))
-      (seq-doseq (src sources)
-        (let* ((face (and (plist-member src :face) `(face ,(plist-get src :face))))
-               (name (plist-get src :name))
-               (cat (plist-get src :category))
-               (items (plist-get src :items))
-               (narrow (plist-get src :narrow))
-               (async-type (consult-web--get-source-prop name :type))
-               (narrow-type (or (car-safe narrow) narrow -1))
-               (err (if consult-web-log-level 'err nil))
-               (pos idx))
-          (when (or (eq consult--narrow narrow-type)
-                    (not (or consult--narrow (plist-get src :hidden))))
-            (condition-case err
-                (progn
-                  (when (functionp items)
-                    (cond
-                     (; sync source, append candidates now
-                      (and (integerp (cdr (func-arity items))) (< (cdr (func-arity items)) 1))
-                      (setq items (funcall items))
-                      (aset candidates idx
-                            (and items (consult-web--multi-propertize
-                                        items cat idx face)))
-                      (funcall async 'flush)
-                      (funcall async (delq nil (apply #'append  (append candidates nil))))
-                      )
-                     (; sync source with input arg, append candidates now
-                      (equal async-type 'sync)
-                      (setq items (funcall items input args))
-                      (aset candidates idx
-                            (and items (consult-web--multi-propertize
-                                        items cat idx face)))
-                      (funcall async 'flush)
-                      (funcall async (delq nil (apply #'append  (append candidates nil))))
-                      )
-                     (; async source, append candidates  in callback
-                      (equal async-type 'async)
-                      (if input (funcall items input
-                               :callback (lambda (response-items)
-                                 (when response-items
-                                   (aset candidates pos
-                                         (consult-web--multi-propertize response-items cat pos face))
-                                   (funcall async 'flush)
-                                   (funcall async (delq nil (apply #'append  (append candidates nil))))
-                                   (funcall async 'refresh)
-                                   )) args)))
-                     (t
-                    (message "source %s needs a :type keyword. See the documentation for `consult-web-define-source'." name
-                   )))
-                    ))
-              ('excessive-lisp-nesting nil) ;;Ignore errors on excessive nesting
-              ('wrong-type-argument nil) ;;Ignore errors on wrong-type-arguments
-              ('error ;; message other erros
-               (message (if consult-web-log-level
-                            (format "error in calling :items of %s source - %s" name (error-message-string err))
-                          (format "error in calling :items of %s source" name)))
-             nil)
-              )))
+  (let ((candidates (make-vector (length sources) nil))
+        (idx 0))
+    (seq-doseq (src sources)
+      (let* ((name (plist-get src :name))
+             (items (plist-get src :items))
+             (narrow (plist-get src :narrow))
+             (async-type (consult-web--get-source-prop name :type))
+             (narrow-type (or (car-safe narrow) narrow -1))
+             (err (if consult-web-log-level 'err nil)))
+        (when (or (eq consult--narrow narrow-type)
+                  (not (or consult--narrow (plist-get src :hidden))))
+          (condition-case err
+              (progn
+                (when (functionp items)
+                  (cond
+                   (; sync source, append candidates right away
+                    (equal async-type 'sync)
+                    (consult-web--multi-update-sync-candidates async src candidates idx action args)
+                    )
+                   (; async source, append candidatesin process
+                    (equal async-type 'async)
+                    (consult-web--multi-update-async-candidates async src candidates idx action args)
+                    )
+                    (; dynamic source, append candidates in a callback function
+                     (equal async-type 'dynamic)
+                     (consult-web--multi-update-dynamic-candidates async src candidates idx action args)
+
+                     )
+                    (t
+                     (message "source %s needs a :type keyword. See the documentation for `consult-web-define-source'." name
+                              )))
+                   ))
+                ('error ;; message other erros
+                 (funcall async 'indicator 'killed)
+                 (message (if consult-web-log-level
+                              (format "error in calling :items of %s source - %s" name (error-message-string err))
+                            (format "error in calling :items of %s source" name)))
+                 nil)
+                )))
         (cl-incf idx))
-      (delq nil (apply #'append  (append candidates nil)))
       ))
 
-;; (defun consult-web--multi-dynamic-compute (async sources &rest args)
-;;   "Dynamic computation of candidates.
-;; ASYNC is the sink
-;; SOURCES is list of sources to use
-;; "
-;;   (setq async (consult--async-indicator async))
-;;   (let* ((request) (current) (timer)
-;;          (debounce consult-web-dynamic-input-debounce)
-;;          (cancel (lambda () (when timer (cancel-timer timer) (setq timer nil))))
-;;          (start (lambda (req) (setq request req) (funcall async 'refresh)))
-;;          (fun (apply-partially #'consult-web--multi-dynamic-candidates-update async sources))
-;;          )
-;;     (lambda (action)
-;;       (pcase action
-;;         ((and 'nil (guard (not request)))
-;;          (funcall async nil))
-;;         ('nil
-;;          (funcall cancel)
-;;          (let ((state 'killed))
-;;            (unwind-protect
-;;                (progn
-;;                  (funcall async 'indicator 'running)
-;;                  (redisplay)
-;;                  ;; Run computation
-;;                  (let* ((response (funcall fun candidates request args)))
-;;                    ;; Flush and update candidate list
-;;                        (if (or (equal response 'nil) (equal response [nil]))
-;;                            (funcall async 'flush)
-;;                          (funcall async 'nil)
-;;                          )
-;;                        (setq state 'finished
-;;                          current request)
-;;                      ))
-;;              (funcall async 'indicator state)
-;;              ;; If the computation was killed, restart it after some time.
-;;              (when (eq state 'killed)
-;;                (setq timer (run-at-time debounce nil start request)))
-;;              (setq request nil))))
-;;         ((pred stringp)
-;;          (funcall cancel)
-;;          (if (or (equal action "") (equal action current))
-;;                (funcall async 'indicator 'finished)
-;;            ;; When there is new input start fetching candidates.
-;;            (funcall start action)
-;;            ))
-;;         ('destroy
-;;          (funcall cancel)
-;;          (funcall async 'destroy))
-;;         (_ (funcall async action))))))
-
-
-
-(defun consult-web--multi-dynamic-compute (async sources &rest args)
+(defun consult-web--multi-dynamic-collection (async sources &rest args)
   "Dynamic computation of candidates.
 ASYNC is the sink
 SOURCES is list of sources to use
 "
   (setq async (consult--async-indicator async))
-  (let* ((request) (current) (timer)
-         (debounce consult-web-dynamic-input-debounce)
-         (candidates (make-vector (length sources) nil))
-         (cancel (lambda () (when timer (cancel-timer timer) (setq timer nil))))
-         (start (lambda (req) (setq request req) (funcall async 'refresh)))
-         (fun (apply-partially #'consult-web--multi-dynamic-candidates-update async sources))
-         )
-    (lambda (action)
-      (pcase action
-        ((and 'nil (guard (not request)))
-         (funcall async nil))
-        ('nil
-         (funcall cancel)
-         (let ((state 'killed))
-           (unwind-protect
-               (progn
-                 (funcall async 'indicator 'running)
-                 (redisplay)
-                 ;; Run computation
-                 (let* ((response (funcall fun request args)))
-                   ;; Flush and update candidate list
-                       (if (or (equal response 'nil) (equal response [nil]))
-                           (funcall async 'flush)
-                         (funcall async 'nil)
-                         )
-                       (setq state 'finished
-                         current request)
-                     ))
-             (funcall async 'indicator state)
-             ;; If the computation was killed, restart it after some time.
-             (when (eq state 'killed)
-               (setq timer (run-at-time debounce nil start request)))
-             (setq request nil))))
-        ((pred stringp)
-         (funcall cancel)
-         (if (or (equal action "") (equal action current))
-               (funcall async 'indicator 'finished)
-           ;; When there is new input start fetching candidates.
-           (funcall start action)
-           ))
-        ('destroy
-         (funcall cancel)
-         (funcall async 'destroy))
-        (_ (funcall async action))))))
 
-(defun consult-web--multi-dynamic-collection (sources &rest args)
+  (let ((consult-web-async-processes (list))
+        (consult-web-dynamic-timers (list))
+        (current))
+  (lambda (action)
+    (pcase action
+      ('nil
+       (funcall async nil))
+      (""
+       (setq current nil)
+       (consult-web--multi-cancel)
+       (funcall async 'flush)
+       (funcall async 'indicator 'finished)
+       )
+      ((pred stringp)
+       (if (equal action current)
+           (funcall async 'indicator 'finished)
+           (progn
+             (setq current action)
+             (consult-web--multi-update-candidates async sources action args)
+             (funcall async 'refresh))))
+    ('destroy
+     (consult-web--multi-cancel)
+     (funcall async 'destroy))
+    (_ (funcall async action))))))
+
+(defun consult-web--multi-dynamic-command (sources &rest args)
 "Dynamic collection with input splitting on multiple SOURCES."
+(declare (indent 1))
 (thread-first
   (consult--async-sink)
-  (consult-web--multi-dynamic-compute sources)
+  (consult--async-refresh-timer)
+  (consult-web--multi-dynamic-collection sources args)
   (consult--async-throttle)
   (consult--async-split)))
 
@@ -1566,7 +1560,7 @@ See `consult--multi' for more info.
  (let* ((sources (consult-web--multi-enabled-sources sources))
          (selected
           (apply #'consult--read
-                 (consult-web--multi-dynamic-collection sources args)
+                 (consult-web--multi-dynamic-command sources args)
                  (append
                   options
                   (list
@@ -1713,7 +1707,7 @@ Do not use this function directly, use `consult-web-define-source' macro
 
 ;;; Macros
 ;;;###autoload
-(cl-defmacro consult-web-define-source (source-name &rest args &key type request on-preview on-return state on-callback lookup dynamic group narrow-char category search-history selection-history face annotate preview-key docstring enabled sort predicate &allow-other-keys)
+(cl-defmacro consult-web-define-source (source-name &rest args &key type request transform on-preview on-return state on-callback lookup dynamic group narrow-char category search-history selection-history face annotate preview-key docstring enabled sort predicate &allow-other-keys)
   "Macro to make a consult-web-source for SOURCE-NAME.
 
 \* Makes
@@ -1853,8 +1847,8 @@ variable that this macro creates for %s=SOURCE-NAME.
   `(progn
 
      ;; make a variable called consult-web--source-%s (%s=source-name)
-     (defvar ,(consult-web--source-name source-name) (consult-web--make-source-list ,source-name ,request ,annotate ,face ,narrow-char ,state ,preview-key ,category ,lookup ,group ,sort ,enabled ,predicate ,selection-history))
-
+     (defvar ,(consult-web--source-name source-name) nil)
+     (setq ,(consult-web--source-name source-name) (consult-web--make-source-list ,source-name ,request ,annotate ,face ,narrow-char ,state ,preview-key ,category ,lookup ,group ,sort ,enabled ,predicate ,selection-history))
       ;; make a dynamic interactive command consult-web-dynamic-%s (%s=source-name)
      (if ,dynamic
          (defun ,(consult-web--func-name source-name) (&optional initial no-callback &rest args)
@@ -1878,6 +1872,7 @@ variable that this macro creates for %s=SOURCE-NAME.
                                                                 :source (consult-web--source-name ,source-name)
                                                                 :face ,face
                                                                 :request-func ,request
+                                                                :transform ,transform
                                                                 :on-preview (or ,on-preview #'consult-web--default-url-preview)
                                                                 :on-return (or ,on-return #'identity)
                                                                 :on-callback (or ,on-callback #'consult-web--default-callback)

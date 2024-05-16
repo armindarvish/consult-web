@@ -81,7 +81,7 @@ See URL `https://brave.com/search/api/' for more info"
 ;; Define the Brave Source
 (consult-web-define-source "Brave"
                            :narrow-char ?b
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--brave-fetch-results
                            :preview-key consult-web-preview-key

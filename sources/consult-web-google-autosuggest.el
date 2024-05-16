@@ -69,7 +69,7 @@ Uses `consult-web-google-autosuggest-api-url' as autosuggest api url."
 
 (consult-web-define-source "Google AutoSuggest"
                            :narrow-char ?G
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--google-autosuggest-fetch-results
                            :on-preview #'ignore

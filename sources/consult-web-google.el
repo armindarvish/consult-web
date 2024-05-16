@@ -104,7 +104,7 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
 
 (consult-web-define-source "Google"
                            :narrow-char ?g
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--google-fetch-results
                            :preview-key consult-web-preview-key

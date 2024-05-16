@@ -77,7 +77,7 @@ for some limited documentation"
 
 (consult-web-define-source "DuckDuckGo API"
                            :narrow-char ?d
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--duckduckgoapi-fetch-results
                            :preview-key consult-web-preview-key

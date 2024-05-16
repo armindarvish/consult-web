@@ -85,7 +85,7 @@ See URL `https://brave.com/search/api/' for more info"
 
 (consult-web-define-source "Brave AutoSuggest"
                            :narrow-char ?B
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--brave-autosuggest-fetch-results
                            :group #'consult-web--group-function

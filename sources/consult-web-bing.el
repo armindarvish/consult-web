@@ -78,7 +78,7 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
 
 (consult-web-define-source "Bing"
                            :narrow-char ?m
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--bing-fetch-results
                            :preview-key consult-web-preview-key

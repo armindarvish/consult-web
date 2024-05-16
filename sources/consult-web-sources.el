@@ -27,11 +27,14 @@
             'consult-web-doi
             'consult-web-duckduckgo
             'consult-web-elfeed
+            'consult-web-gh
             'consult-web-google
             'consult-web-google-autosuggest
             'consult-web-gptel
             'consult-web-line-multi
+            'consult-web-mu4e
             'consult-web-notes
+            'consult-web-notmuch
             'consult-web-pubmed
             'consult-web-scopus
             'consult-web-stackoverflow

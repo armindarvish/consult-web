@@ -175,7 +175,7 @@ for details"
 
 (consult-web-define-source "YouTube"
                            :narrow-char ?y
-                           :type 'async
+                           :type 'dynamic
                            :category 'consult-web-video
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--youtube-fetch-results

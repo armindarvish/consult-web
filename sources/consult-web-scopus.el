@@ -167,7 +167,7 @@ See URL `https://dev.elsevier.com/documentation/SCOPUSSearchAPI.wadl' for more i
                            :narrow-char ?s
                            :category 'consult-web-scholar
                            :face 'consult-web-scholar-source-face
-                           :type 'async
+                           :type 'dynamic
                            :request #'consult-web--scopus-fetch-results
                            :preview-key consult-web-preview-key
                            :on-preview #'consult-web--scopus-preview

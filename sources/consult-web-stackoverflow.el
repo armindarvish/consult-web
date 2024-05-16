@@ -135,7 +135,7 @@ See URL `https://api.stackexchange.com/' for more info.
 
 (consult-web-define-source "StackOverflow"
                            :narrow-char ?s
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--stackoverflow-fetch-results
                            :preview-key consult-web-preview-key

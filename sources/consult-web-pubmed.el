@@ -223,7 +223,7 @@ FACE is the face to apply to TITLE
 
 (consult-web-define-source "PubMed"
                            :narrow-char ?p
-                           :type 'async
+                           :type 'dynamic
                            :category 'consult-web-scholar
                            :face 'consult-web-scholar-source-face
                            :request #'consult-web--pubmed-fetch-results

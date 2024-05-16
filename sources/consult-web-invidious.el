@@ -203,7 +203,7 @@ FACE is the face to apply to TITLE
 
 (consult-web-define-source "Invidious"
                            :narrow-char ?I
-                           :type 'async
+                           :type 'dynamic
                            :category 'consult-web-video
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--invidious-fetch-results

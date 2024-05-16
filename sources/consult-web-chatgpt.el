@@ -122,7 +122,7 @@ See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/i
 
 (consult-web-define-source "chatGPT"
                            :narrow-char ?G
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-ai-source-face
                            :request #'consult-web--chatgpt-fetch-results
                            :preview-key consult-web-preview-key
