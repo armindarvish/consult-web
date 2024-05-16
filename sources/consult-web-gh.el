@@ -60,7 +60,7 @@
 (defun consult-web--gh-callback (cand)
   (funcall consult-gh-repo-action (cons cand (text-properties-at 0 (cdr (get-text-property 0 'multi-category cand))))))
 
-(consult-web-define-source "GitHub Repos"
+(consult-web-define-source "GitHub"
                            :narrow-char ?G
                            :type 'async
                            :category 'consult-gh-repos
