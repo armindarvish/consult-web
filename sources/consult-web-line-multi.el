@@ -30,7 +30,7 @@
                (opts (car-safe opts))
                (items (consult-web--line-multi-candidates query))
                (annotated-results (mapcar (lambda (item)
-                                            (let* ((source "Consult Line Multi")
+                                            (let* ((source "buffers text search")
                                                    (marker  (consult--get-location item))
                                                    (title (substring-no-properties item 0 -1))
                                                    (decorated (consult-web--line-multi-format-candidate :source source :query query :marker marker :title title)))
@@ -86,7 +86,7 @@ FACE is the face to apply to TITLE"
     (consult--jump marker)
        ))
 
-(consult-web-define-source "Consult Line Multi"
+(consult-web-define-source "buffers text search"
                            :narrow-char ?L
                            :type 'sync
                            :category 'consult-location
