@@ -1,4 +1,4 @@
-;;; consult-web-notes.el --- Consulting Notes -*- lexical-binding: t -*-
+;;; consult-web-notes.el --- Consulting Note Files -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2024 Armin Darvish
 
@@ -15,81 +15,112 @@
 ;;; Code:
 
 (require 'consult-web)
-(require 'consult-notes)
+(require 'consult-web-grep)
 
-(defun consult-web--org-roam-note-preview (cand)
-  "Preview function for org-roam files."
-  (if cand
-      (let* ((title (get-text-property 0 :title cand))
-             (node (org-roam-node-from-title-or-alias title)))
-        (if (org-roam-node-p node)
-            (consult--file-action (org-roam-node-file node))
-          ))))
+(defcustom consult-web-notes-files (apply #'append
+                                     (when (bound-and-true-p consult-notes-file-dir-sources)
+                                     ;; dir sources
+                                     (apply #'append (mapcar #'cddr consult-notes-file-dir-sources)))
+                                     ;; org roam
+                                     (when (bound-and-true-p org-roam-directory)
+                                       (list (expand-file-name org-roam-directory)))
+                                     ;; denote
+                                     (when (bound-and-true-p denote-directory)
+                                       (list (expand-file-name denote-directory)))
+                                     ;; org agenda files
+                                     (when (bound-and-true-p consult-notes-org-headings-mode)
+                                       (list (mapcar #'expand-file-name consult-notes-org-headings-files))))
+"List of all note files for consult-web-notes."
+:type '(repeat :tag "list of files" string))
 
-(defun consult-web--org-headings-preview (cand)
-  "Preview function for org headings."
-  (if cand
-      (let* ((title (get-text-property 0 :title cand))
-             (marker (get-text-property 0 'consult--candidate title)))
-        (if marker
-            (consult--jump marker)))))
+(defcustom consult-web-notes-use-rg t
+"whether to use ripgrep when searching ntoes?"
+:type 'boolean)
 
-(defun consult-web--org-roam-note-callback (cand &rest args)
-  "Callback function for org-roam files."
-  (let* ((title (get-text-property 0 :title cand))
-         (node (org-roam-node-from-title-or-alias title)))
-    (org-roam-node-open node)))
+(cl-defun consult-web--notes-builder (input &rest args &key callback &allow-other-keys)
+  "makes builder command line args for “ripgrep”.
+"
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+               (opts (car-safe opts))
+               (count (plist-get opts :count))
+               (dir (plist-get opts :dir))
+               (dir (if dir (file-truename (format "%s" dir))))
+               (dir (or dir consult-web-notes-files))
+               (count (or (and (integerp count) count)
+                          (and count (string-to-number (format "%s" count)))
+                          consult-web-default-count))
+               )
+   (funcall (consult-web--grep-make-builder (if (and consult-web-notes-use-rg (executable-find "rg")) #'consult--ripgrep-make-builder #'consult--grep-make-builder) dir) query)
+            ))
 
-(defun consult-web--org-headings-callback (cand &rest args)
-  "Callback function for org headings."
-  (if cand
-      (let* ((title (get-text-property 0 :title cand))
-             (marker (get-text-property 0 'consult--candidate title)))
-        (if marker
-           (let* ((buff (marker-buffer marker))
-                 (pos (marker-position marker)))
-             (if buff (with-current-buffer buff
-               (if pos (goto-char pos))
-               (funcall consult--buffer-display buff)
-               (recenter nil t)
-               )))
-             ))))
+(defun consult-web--notes-transform (candidates &optional query)
+(let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+      (file "")
+      (file-len 0)
+      (file-str "")
+      result)
+          (save-match-data
+            (dolist (str candidates)
+              (when (and (string-match consult--grep-match-regexp str)
+                         ;; Filter out empty context lines
+                         (or (/= (aref str (match-beginning 3)) ?-)
+                             (/= (match-end 0) (length str))))
+                ;; We share the file name across candidates to reduce
+                ;; the amount of allocated memory.
+                (unless (and (= file-len (- (match-end 1) (match-beginning 1)))
+                             (eq t (compare-strings
+                                    file 0 file-len
+                                    str (match-beginning 1) (match-end 1) nil)))
+                  (setq file (match-string 1 str))
+                  ;; (setq file (file-truename file))
+                  ;; (if (> file-len (* frame-width-percent 2))
+                  ;;   (setq file-str (consult-web--set-string-width file (* frame-width-percent 2) (* frame-width-percent 1)))
+                  ;;   (setq file-str file))
+                  ;; (when (> file-len (* frame-width-percent 2))
+                  ;;   (setq file (consult-web--set-string-width file (* frame-width-percent 2) (* frame-width-percent 1))
+                  ;;                          ))
 
-;; make consult-web sources from consult-notes sources
-(when consult-notes-org-headings-mode
-  (consult-web--make-source-from-consult-source 'consult-notes-org-headings--source
-                                                :category 'file
-                                                :type 'sync
-                                                :face 'consult-web-notes-source-face
-                                                :search-history 'consult-web--search-history
-                                                :selection-history 'consult-web--selection-history
-                                                :on-preview #'consult-web--org-headings-preview
-                                                :on-return #'identity
-                                                :on-callback #'consult-web--org-headings-callback
-                                                :search-history 'consult-web--search-history
-                                                :selection-history 'consult-web--selection-history
-                                                :preview-key 'consult-preview-key
-                                                :group #'consult-web--group-function
-                                                :dynamic 'both
-                                                ))
+                  ;; (propertize file-str 'face 'consult-file 'consult--prefix-group file)
+                  (setq file-len (length file))
+)
+                (let* ((line (propertize (match-string 2 str) 'face 'consult-line-number))
+                       (ctx (= (aref str (match-beginning 3)) ?-))
+                       (sep (if ctx "-" ":"))
+                       (content (substring str (match-end 0)))
+                       (line-len (length line)))
+                  (when (length> content consult-grep-max-columns)
+                    ;; (setq content (substring content 0 consult-grep-max-columns))
+                    (setq content  (consult-web--set-string-width content consult-grep-max-columns))
+                    )
+                  (setq str (concat file sep line sep content))
 
-(when consult-notes-org-roam-mode
-  (cl-loop for source in '(consult-notes-org-roam--refs consult-notes-org-roam--nodes)
-           do (consult-web--make-source-from-consult-source source
-                                                            :category 'file
-                                                            :type 'sync
-                                                            :face 'consult-web-notes-source-face
-                                                            :search-history 'consult-web--search-history
-                                                            :selection-history 'consult-web--selection-history
-                                                            :on-preview #'consult-web--org-roam-note-preview
-                                                            :on-return #'identity
-                                                            :on-callback #'consult-web--org-roam-note-callback
+                  ;; (setq str (concat content sep line sep (propertize (file-name-nondirectory file) 'face 'consult-file 'consult--prefix-group file)))
+                  ;; Store file name in order to avoid allocations in `consult--prefix-group'
+                  (add-text-properties 0 file-len `(face consult-file consult--prefix-group ,file) str)
+                  (put-text-property (1+ file-len) (+ 1 file-len line-len) 'face 'consult-line-number str)
+                  ;; (when ctx
+                  ;;   (add-face-text-property (+ 2 file-len line-len) (length str) 'consult-grep-context 'append str))
+                  (push (propertize str :source "Notes Search" :title query :file file) result)))))
+          result))
 
-                                                            :preview-key 'consult-preview-key
-                                                            :dynamic 'both
-                                                            :group #'consult-web--group-function
-                                                            :annotate nil
-                                                            )))
+(consult-web-define-source "Notes Search"
+                           :narrow-char ?n
+                           :type 'async
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--notes-builder
+                           :transform #'consult-web--notes-transform
+                           :on-preview #'consult-web--grep-preview
+                           :on-return #'identity
+                           :on-callback #'consult-web--grep-callback
+                           :preview-key 'any
+                           :search-history 'consult-web--search-history
+                           :selection-history 'consult-web--selection-history
+                           ;;:group #'consult-web--group-function
+                           :group #'consult--prefix-group
+                           :sort t
+                           :dynamic 'both
+                           :annotate nil
+                           )
 
 ;;; provide `consult-web-notes' module
 

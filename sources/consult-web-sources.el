@@ -24,12 +24,15 @@
             'consult-web-browser-history
             'consult-web-buffer
             'consult-web-chatgpt
+            'consult-web-consult-notes
             'consult-web-doi
             'consult-web-duckduckgo
             'consult-web-elfeed
             'consult-web-gh
             'consult-web-google
             'consult-web-google-autosuggest
+            'consult-web-grep
+            'consult-web-ripgrep
             'consult-web-gptel
             'consult-web-line-multi
             'consult-web-mu4e

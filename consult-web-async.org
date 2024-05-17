@@ -1527,9 +1527,6 @@ POS and CATEGORY are the group ID and category for these items."
 ))
 #+end_src
 
-#+RESULTS:
-: consult-web--multi-update-sync-candidates
-
 
 
 
@@ -1548,9 +1545,6 @@ POS and CATEGORY are the group ID and category for these items."
                            (funcall async 'refresh)
                            )) args)))
 #+end_src
-
-#+RESULTS:
-: consult-web--multi-update-dynamic-candidates
 
 
 
@@ -1641,9 +1635,6 @@ POS and CATEGORY are the group ID and category for these items."
     (when proc (add-to-list 'consult-web-async-processes `(,proc . ,proc-buf)))))
 #+end_src
 
-#+RESULTS:
-: consult-web--multi-update-async-candidates
-
 ***** consult-web--multi-cancel
 #+begin_src emacs-lisp
 (defun consult-web--multi-cancel ()
@@ -1655,9 +1646,6 @@ POS and CATEGORY are the group ID and category for these items."
   (mapcar (lambda (timer) (when timer (cancel-timer timer))) consult-web-dynamic-timers)
   (setq consult-web-dynamic-timers nil))
 #+end_src
-
-#+RESULTS:
-: consult-web--multi-cancel
 
 
 ***** consult-web--multi-update-candidates
@@ -1712,9 +1700,6 @@ INPUT is the input string to pass to SOURCES
       ))
 #+end_src
 
-#+RESULTS:
-: consult-web--multi-update-candidates
-
 ***** collect candidates form multiple sources
 #+begin_src emacs-lisp
 (defun consult-web--multi-dynamic-collection (async sources &rest args)
@@ -1749,9 +1734,6 @@ SOURCES is list of sources to use
         (_ (funcall async action))))))
 #+end_src
 
-#+RESULTS:
-: consult-web--multi-dynamic-collection
-
 
 
 ***** dynamic command
@@ -1766,9 +1748,6 @@ SOURCES is list of sources to use
   (consult--async-throttle)
   (consult--async-split)))
 #+end_src
-
-#+RESULTS:
-: consult-web--multi-dynamic-command
 
 ***** consult-web--multi-dynamic
 #+begin_src emacs-lisp
@@ -1806,9 +1785,6 @@ See `consult--multi' for more info.
       (setq selected `(,(car selected) :match t ,@(cdr selected))))
     selected))
 #+end_src
-
-#+RESULTS:
-: consult-web--multi-dynamic
 
 
 ** Macro
@@ -2674,12 +2650,15 @@ Gets the preview function from `consult-web-sources-alist'."
             'consult-web-browser-history
             'consult-web-buffer
             'consult-web-chatgpt
+            'consult-web-consult-notes
             'consult-web-doi
             'consult-web-duckduckgo
             'consult-web-elfeed
             'consult-web-gh
             'consult-web-google
             'consult-web-google-autosuggest
+            'consult-web-grep
+            'consult-web-ripgrep
             'consult-web-gptel
             'consult-web-line-multi
             'consult-web-mu4e
@@ -3551,11 +3530,11 @@ FACE is the face to apply to TITLE"
 
 *** consult-notes
 :PROPERTIES:
-:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-notes.el
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-consult-notes.el
 :END:
 **** header
 #+begin_src emacs-lisp
-;;; consult-web-notes.el --- Consulting Notes -*- lexical-binding: t -*-
+;;; consult-web-consult-notes.el --- Consulting Consult Notes -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2024 Armin Darvish
 
@@ -3663,12 +3642,12 @@ FACE is the face to apply to TITLE"
 
 **** provide and footer
 #+begin_src emacs-lisp
-;;; provide `consult-web-notes' module
+;;; provide `consult-web-consult-notes' module
 
-(provide 'consult-web-notes)
+(provide 'consult-web-consult-notes)
 
-(add-to-list 'consult-web-sources-modules-to-load 'consult-web-notes)
-;;; consult-web-notes.el ends here
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-consult-notes)
+;;; consult-web-consult-notes.el ends here
 #+end_src
 
 
@@ -3784,6 +3763,30 @@ FACE is the face to apply to TITLE"
 
 
 *** consult-grep
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-grep.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-grep.el --- Consulting Grep Command -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+#+end_src
+
 **** grep-builder
 #+begin_src emacs-lisp
 (defun consult-web--grep-make-builder (make-builder &optional dir)
@@ -3843,9 +3846,6 @@ FACE is the face to apply to TITLE"
           result))
 #+end_src
 
-#+RESULTS:
-: consult-web--grep-transform
-
 
 
 **** preview
@@ -3858,9 +3858,6 @@ FACE is the face to apply to TITLE"
 
 #+end_src
 
-#+RESULTS:
-: consult-web--grep-preview
-
 **** callback
 #+begin_src emacs-lisp
 (defun consult-web--grep-callback (cand)
@@ -3868,9 +3865,6 @@ FACE is the face to apply to TITLE"
 (funcall  (consult--jump-state) 'return (consult--grep-position (cdr (get-text-property 0 'multi-category cand))))
   )
 #+end_src
-
-#+RESULTS:
-: consult-web--grep-callback
 
 **** consult-web-grep-builder
 #+begin_src emacs-lisp
@@ -3915,11 +3909,42 @@ FACE is the face to apply to TITLE"
                            )
 #+end_src
 
-#+RESULTS:
-: grep
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-grep' module
+
+(provide 'consult-web-grep)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-grep)
+;;; consult-web-grep.el ends here
+#+end_src
 
 
-*** grep-all-notes
+*** notes
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-notes.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-notes.el --- Consulting Note Files -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+(require 'consult-web-grep)
+#+end_src
 
 **** custom variables
 #+begin_src emacs-lisp
@@ -3945,9 +3970,6 @@ FACE is the face to apply to TITLE"
 
 #+end_src
 
-#+RESULTS:
-: consult-web-notes-use-rg
-
 **** consult-web-notes-builder
 #+begin_src emacs-lisp
 (cl-defun consult-web--notes-builder (input &rest args &key callback &allow-other-keys)
@@ -3966,9 +3988,6 @@ FACE is the face to apply to TITLE"
    (funcall (consult-web--grep-make-builder (if (and consult-web-notes-use-rg (executable-find "rg")) #'consult--ripgrep-make-builder #'consult--grep-make-builder) dir) query)
             ))
 #+end_src
-
-#+RESULTS:
-: consult-web--notes-builder
 
 
 **** transform
@@ -4020,16 +4039,13 @@ FACE is the face to apply to TITLE"
                   (put-text-property (1+ file-len) (+ 1 file-len line-len) 'face 'consult-line-number str)
                   ;; (when ctx
                   ;;   (add-face-text-property (+ 2 file-len line-len) (length str) 'consult-grep-context 'append str))
-                  (push (propertize str :source "Notes" :title query :file file) result)))))
+                  (push (propertize str :source "Notes Search" :title query :file file) result)))))
           result))
 #+end_src
 
-#+RESULTS:
-: consult-web--notes-transform
-
 **** source
 #+begin_src emacs-lisp
-(consult-web-define-source "Notes"
+(consult-web-define-source "Notes Search"
                            :narrow-char ?n
                            :type 'async
                            :face 'consult-web-engine-source-face
@@ -4049,8 +4065,16 @@ FACE is the face to apply to TITLE"
                            )
 #+end_src
 
-#+RESULTS:
-: Notes
+
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-notes' module
+
+(provide 'consult-web-notes)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-notes)
+;;; consult-web-notes.el ends here
+#+end_src
 
 
 *** consult-mu
@@ -4320,6 +4344,31 @@ cand
 #+end_src
 
 *** consult-ripgrep
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-ripgrep.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-ripgrep.el --- Consulting Ripgrep Command -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+(require 'consult-web-grep)
+#+end_src
+
 **** consult-web-ripgrep-builder
 #+begin_src emacs-lisp
 (cl-defun consult-web--ripgrep-builder (input &rest args &key callback &allow-other-keys)
@@ -4338,9 +4387,6 @@ cand
    (funcall (consult-web--grep-make-builder #'consult--ripgrep-make-builder dir) query)
             ))
 #+end_src
-
-#+RESULTS:
-: consult-web--ripgrep-builder
 
 
 **** transform
@@ -4388,15 +4434,9 @@ cand
           result))
 #+end_src
 
-#+RESULTS:
-: consult-web--ripgrep-transform
-
 #+begin_src emacs-lisp
 (file-relative-name "/Users/armin/projects/consult-web/README.org" (buffer-file-name))
 #+end_src
-
-#+RESULTS:
-: ../README.org
 
 
 
@@ -4423,8 +4463,15 @@ cand
                            )
 #+end_src
 
-#+RESULTS:
-: ripgrep
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-ripgrep' module
+
+(provide 'consult-web-ripgrep)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-ripgrep)
+;;; consult-web-ripgrep.el ends here
+#+end_src
 
 
 *** Doi.org
@@ -5371,9 +5418,6 @@ FACE is the face to apply to TITLE
     str))
 #+end_src
 
-#+RESULTS:
-: consult-web--invidious-format-candidate
-
 **** get servers
 #+begin_src emacs-lisp
 (defun consult-web--invidious-get-servers (&optional rotate)
@@ -5400,9 +5444,6 @@ FACE is the face to apply to TITLE
                       ) attrs))
 ))))))
 #+end_src
-
-#+RESULTS:
-: consult-web--invidious-get-servers
 
 **** invidious
 #+begin_src emacs-lisp
@@ -5518,9 +5559,6 @@ FACE is the face to apply to TITLE
                            :annotate nil
                            )
 #+end_src
-
-#+RESULTS:
-: Invidious
 
 **** provide and footer
 #+begin_src emacs-lisp
