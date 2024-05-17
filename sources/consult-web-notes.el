@@ -115,8 +115,8 @@
                            :preview-key 'any
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           ;;:group #'consult-web--group-function
-                           :group #'consult--prefix-group
+                           :group #'consult-web--group-function
+                           ;;:group #'consult--prefix-group
                            :sort t
                            :dynamic 'both
                            :annotate nil
