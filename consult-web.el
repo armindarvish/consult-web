@@ -1332,7 +1332,7 @@ POS and CATEGORY are the group ID and category for these items."
           (funcall (eval fun) (cdr (get-text-property 0 'multi-category cand))))))
     ))
 
-(defun consult-web--multi-update-sync-candidates (async source candidates idx action &rest args)
+(defun consult-web--multi-update-sync-candidates (async source idx action &rest args)
   (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
          (cat (plist-get source :category))
          (fun (plist-get source :items))
@@ -1343,29 +1343,21 @@ POS and CATEGORY are the group ID and category for these items."
         (setq items (funcall fun)))
        (t
         (setq items (funcall fun action args)))))
-
-    (aset candidates idx
-          (and items (consult-web--multi-propertize items cat idx face)))
-    (funcall async (aref candidates idx))
+    (funcall async (and items (consult-web--multi-propertize items cat idx face)))
     (funcall async 'refresh)
 ))
 
-(defun consult-web--multi-update-dynamic-candidates (async source candidates idx action &rest args)
-  ;; (consult-web--dynamic-get-candidates async source candidates idx action)
+(defun consult-web--multi-update-dynamic-candidates (async source idx action &rest args)
   (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
-         (cat (plist-get source :category))
-         (timer))
+         (cat (plist-get source :category)))
     (funcall (plist-get source :items) action
              :callback (lambda (response-items)
                          (when response-items
-                           (aset candidates idx
-                                 (consult-web--multi-propertize response-items cat idx face))
-                           (funcall async (aref candidates idx))
+                           (funcall async (consult-web--multi-propertize response-items cat idx face))
                            (funcall async 'refresh)
-                           )) args)
-    ))
+                           )) args)))
 
-(defun consult-web--multi-update-async-candidates (async source candidates idx action &rest args)
+(defun consult-web--multi-update-async-candidates (async source idx action &rest args)
   ""
   (let* ((name (plist-get source :name))
          (builder (plist-get source :items))
@@ -1378,11 +1370,9 @@ POS and CATEGORY are the group ID and category for these items."
          (consult-web--async-log-buffer (concat " *consult-web-async-log--" name "*"))
          (cat (plist-get source :category))
          (query (car (consult-web--split-command action)))
-         )
-    (let* ((args (funcall builder action)))
-      (unless (stringp (car args))
+         (args (funcall builder action)))
+    (unless (stringp (car args))
         (setq args (car args)))
-      (setq my:test1 args)
       (when proc
         (delete-process proc)
         (kill-buffer proc-buf)
@@ -1403,10 +1393,8 @@ POS and CATEGORY are the group ID and category for these items."
                         (when lines
                           (setq lines (mapcar (lambda (line) (propertize line :source name :title line :query query)) lines))
                           (when transform (setq lines (funcall transform lines query)))
-                          (aset candidates idx
-                              (consult-web--multi-propertize lines cat idx face)))
-                        (funcall async (car (delq nil (append candidates nil))))
-                        (funcall async 'refresh)
+                          (funcall async (consult-web--multi-propertize lines cat idx face))
+                          (funcall async 'refresh))
                         )))))
                (proc-sentinel
                 (lambda (_ event)
@@ -1446,7 +1434,7 @@ POS and CATEGORY are the group ID and category for these items."
                               :noquery t
                               :command ,args
                               :filter ,proc-filter
-                              :sentinel ,proc-sentinel))))))
+                              :sentinel ,proc-sentinel)))))
     (when proc (add-to-list 'consult-web-async-processes `(,proc . ,proc-buf)))))
 
 (defun consult-web--multi-cancel ()
@@ -1456,8 +1444,7 @@ POS and CATEGORY are the group ID and category for these items."
           consult-web-async-processes)
   (setq consult-web-async-processes nil)
   (mapcar (lambda (timer) (when timer (cancel-timer timer))) consult-web-dynamic-timers)
-  (setq consult-web-dynamic-timers nil)
-  )
+  (setq consult-web-dynamic-timers nil))
 
 (defun consult-web--multi-update-candidates (async sources action &rest args)
   "Dynamically updates CANDIDATES for multiple SOURCES
@@ -1466,8 +1453,7 @@ ASYNC is the sink function
 SOURCES are sources
 INPUT is the input string to pass to SOURCES
 "
-  (let ((candidates (make-vector (length sources) nil))
-        (idx 0))
+  (let ((idx 0))
     (seq-doseq (src sources)
       (let* ((name (plist-get src :name))
              (items (plist-get src :items))
@@ -1483,15 +1469,15 @@ INPUT is the input string to pass to SOURCES
                   (cond
                    (; sync source, append candidates right away
                     (equal async-type 'sync)
-                    (consult-web--multi-update-sync-candidates async src candidates idx action args)
+                    (consult-web--multi-update-sync-candidates async src idx action args)
                     )
                    (; async source, append candidatesin process
                     (equal async-type 'async)
-                    (consult-web--multi-update-async-candidates async src candidates idx action args)
+                    (consult-web--multi-update-async-candidates async src idx action args)
                     )
                     (; dynamic source, append candidates in a callback function
                      (equal async-type 'dynamic)
-                     (consult-web--multi-update-dynamic-candidates async src candidates idx action args)
+                     (consult-web--multi-update-dynamic-candidates async src idx action args)
 
                      )
                     (t
@@ -1514,31 +1500,30 @@ ASYNC is the sink
 SOURCES is list of sources to use
 "
   (setq async (consult--async-indicator async))
-
   (let ((consult-web-async-processes (list))
         (consult-web-dynamic-timers (list))
         (current))
-  (lambda (action)
-    (pcase action
-      ('nil
-       (funcall async nil))
-      (""
-       (setq current nil)
-       (consult-web--multi-cancel)
-       (funcall async 'flush)
-       (funcall async 'indicator 'finished)
-       )
-      ((pred stringp)
-       (if (equal action current)
-           (funcall async 'indicator 'finished)
+    (lambda (action)
+      (pcase action
+        ('nil
+         (funcall async nil))
+        (""
+         (setq current nil)
+         (consult-web--multi-cancel)
+         (funcall async 'flush)
+         (funcall async 'indicator 'finished)
+         )
+        ((pred stringp)
+         (if (equal action current)
+             (funcall async 'indicator 'finished)
            (progn
              (setq current action)
              (consult-web--multi-update-candidates async sources action args)
              (funcall async 'refresh))))
-    ('destroy
-     (consult-web--multi-cancel)
-     (funcall async 'destroy))
-    (_ (funcall async action))))))
+        ('destroy
+         (consult-web--multi-cancel)
+         (funcall async 'destroy))
+        (_ (funcall async action))))))
 
 (defun consult-web--multi-dynamic-command (sources &rest args)
 "Dynamic collection with input splitting on multiple SOURCES."
