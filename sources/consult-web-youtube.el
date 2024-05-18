@@ -185,7 +185,7 @@ for details"
 (cl-defun consult-web--youtube-fetch-video-details (videoids &rest args &key callback query &allow-other-keys)
   "Fetches search results for INPUT from “YouTube Data API” service.
 "
-  (pcase-let* ((params `(("part" . "snippet, statistics, contentDetails")
+  (pcase-let* ((params `(("part" . "snippet,statistics,contentDetails")
                          ("key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key))
                          ("id" . ,(string-join videoids ","))
                          ))
@@ -242,7 +242,7 @@ for details"
 (cl-defun consult-web--youtube-fetch-playlist-details (playlistids &rest args &key callback query candidates &allow-other-keys)
   "Fetches search results for INPUT from “YouTube Data API” service.
 "
-  (pcase-let* ((params `(("part" . "snippet, contentDetails")
+  (pcase-let* ((params `(("part" . "snippet,contentDetails")
                          ("key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key))
                          ("id" . ,(string-join playlistids ","))
                          ))
@@ -295,7 +295,7 @@ for details"
 (cl-defun consult-web--youtube-fetch-channel-details (channelids &rest args &key callback query candidates &allow-other-keys)
   "Fetches channel details for CHANNELIDS from “YouTube Data API” service.
 "
-  (pcase-let* ((params `(("part" . "snippet, statistics")
+  (pcase-let* ((params `(("part" . "snippet,statistics")
                          ("key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key))
                          ("id" . ,(string-join channelids ","))
                          ))
