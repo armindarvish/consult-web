@@ -772,7 +772,6 @@ This is ignored in async requests.
                                    :then 'sync
                                    :else (or error #'consult-web--plz-error-handler)
                                    :timeout (or timeout consult-web-default-timeout)))
-      (print (consult-web--make-url-string url params))
       (funcall #'plz (or type 'get) (consult-web--make-url-string url params)
                :headers headers
                :as parser
