@@ -1351,6 +1351,7 @@ the candidates for the sync source
         (setq cmd (car cmd)))
       (when cmd
         (let* ((lines)
+               (process-adaptive-read-buffering nil)
               (out (with-temp-buffer
                           (set-buffer-file-coding-system 'cp1047)
                           (list (apply 'call-process (car cmd) nil (current-buffer) nil (cdr cmd))
@@ -2382,8 +2383,9 @@ without any callback action.
 "
   (interactive "P")
   (let* ((input (or input
-                    (and consult-web-default-autosuggest-command (funcall consult-web-default-autosuggest-command))
+                    (and consult-web-default-autosuggest-command  (funcall consult-web-default-autosuggest-command))
                     (consult-web--read-search-string)))
+         (input (if (stringp input) (substring-no-properties input)))
          (sources (or sources consult-web-static-sources))
          (sources (remove nil (mapcar (lambda (source) (consult-web--get-source-prop source :source))  sources)))
          (prompt (concat "[" (propertize "consult-web-static" 'face 'consult-web-prompt-face) "]" " Search:  "))
@@ -3190,6 +3192,15 @@ See URL `https://brave.com/search/api/' for more info"
 
 (require 'consult-web)
 #+end_src
+**** return
+#+begin_src emacs-lisp
+(defun consult-web--brave-autosuggest-return (cand)
+  "Return the string of CAND with no properties
+"
+(when (stringp cand)
+  (substring-no-properties (string-trim cand))))
+
+#+end_src
 **** brave autosuggest
 #+begin_src emacs-lisp
 (defvar consult-web-brave-autosuggest-api-url "https://api.search.brave.com/res/v1/suggest/search")
@@ -3266,7 +3277,7 @@ See URL `https://brave.com/search/api/' for more info"
                            :request #'consult-web--brave-autosuggest-fetch-results
                            :group #'consult-web--group-function
                            :on-preview #'ignore
-                           :on-return #'string-trim
+                           :on-return #'consult-web--brave-autosuggest-return
                            :on-callback #'string-trim
                            :search-history 'consult-web--search-history
                            :selection-history t

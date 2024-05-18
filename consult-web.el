@@ -1187,6 +1187,7 @@ the candidates for the sync source
         (setq cmd (car cmd)))
       (when cmd
         (let* ((lines)
+               (process-adaptive-read-buffering nil)
               (out (with-temp-buffer
                           (set-buffer-file-coding-system 'cp1047)
                           (list (apply 'call-process (car cmd) nil (current-buffer) nil (cdr cmd))
@@ -2108,8 +2109,9 @@ without any callback action.
 "
   (interactive "P")
   (let* ((input (or input
-                    (and consult-web-default-autosuggest-command (funcall consult-web-default-autosuggest-command))
+                    (and consult-web-default-autosuggest-command  (funcall consult-web-default-autosuggest-command))
                     (consult-web--read-search-string)))
+         (input (if (stringp input) (substring-no-properties input)))
          (sources (or sources consult-web-static-sources))
          (sources (remove nil (mapcar (lambda (source) (consult-web--get-source-prop source :source))  sources)))
          (prompt (concat "[" (propertize "consult-web-static" 'face 'consult-web-prompt-face) "]" " Search:  "))
