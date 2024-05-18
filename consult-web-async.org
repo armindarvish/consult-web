@@ -1283,12 +1283,95 @@ the candidates for the sync source
         (string-match (concat ".*" (string-trim (car-safe (consult-web--split-command (minibuffer-contents-no-properties))) split-char "\n") ".*") (substring-no-properties cand))))))
 #+end_src
 **** consult-web-multi-static
+***** static collect static sync candidates
+#+begin_src emacs-lisp
+(defun consult-web--multi-static-sync-candidates (source idx input &rest args)
+  (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
+         (cat (plist-get source :category))
+         (fun (plist-get source :items))
+         (items))
+    (when (functionp fun)
+      (cond
+       ((and (integerp (cdr (func-arity fun))) (< (cdr (func-arity fun)) 1))
+        (setq items (funcall fun)))
+       (t
+        (setq items (funcall fun input args)))))
+ (and items (consult-web--multi-propertize items cat idx face))
+    ))
+#+end_src
+
+***** static collect static dynamic candidates
+#+begin_src emacs-lisp
+(defun consult-web--multi-static-dynamic-candidates (source idx input &rest args)
+  (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
+         (cat (plist-get source :category))
+         (name (plist-get source :name))
+         (fun (plist-get source :items))
+         (items)
+         (current))
+    (when (functionp fun)
+      (funcall fun input
+               :callback (lambda (response-items)
+                           (if response-items
+                               (setq current
+                                     (and response-items (consult-web--multi-propertize
+                                                          response-items cat idx face)))
+                             (setq current t)))
+               args)
+
+      (let ((count 0)
+           (max consult-web-default-timeout)
+           (step 0.05))
+       (while (and (< count max) (not current))
+         (+ count step)
+         (if (>= count max)
+             (message "consult-web: Hmmm! %s took longer than expected." name)
+           (sit-for step))))
+      current)))
+#+end_src
+
+
+
+***** static collect static async candidates
+#+begin_src emacs-lisp
+(defun consult-web--multi-static-async-candidates (source idx input &rest args)
+  (let* ((name (plist-get source :name))
+         (builder (plist-get source :items))
+         (transform (consult-web--get-source-prop name :transform))
+         (props (seq-drop-while (lambda (x) (not (keywordp x))) args))
+         (proc)
+         (proc-buf)
+         (face (and (plist-member source :face) `(face ,(plist-get source :face))))
+         (consult-web--async-log-buffer (concat " *consult-web-async-log--" name "*"))
+         (cat (plist-get source :category))
+         (query (car (consult-web--split-command input)))
+         (cmd (funcall builder input))
+         (items))
+    (unless (stringp (car cmd))
+        (setq cmd (car cmd)))
+      (when cmd
+        (let* ((lines)
+              (out (with-temp-buffer
+                          (set-buffer-file-coding-system 'cp1047)
+                          (list (apply 'call-process (car cmd) nil (current-buffer) nil (cdr cmd))
+                                (replace-regexp-in-string "" "\n"
+                                                   (buffer-string))))))
+          (if (eq (car out) 0)
+            (progn
+              (setq lines (mapcar (lambda (line) (propertize line :source name :title line :query query)) (cdr out)))
+              (when transform (setq lines (funcall transform lines query))))
+            (message "process %s returned error with code %s and message %s" name (car out) (cdr out)))
+
+          (consult-web--multi-propertize lines cat idx face)
+))))
+
+#+end_src
+
 ***** multi-candidates-static
 #+begin_src emacs-lisp
 (defun consult-web--multi-candidates-static (sources &optional input &rest args)
-  "Return `consult--multi' candidates from SOURCES."
-  (let* ((candidates (make-vector (length sources) nil))
-         (current)
+  "Return `consult--static' candidates from SOURCES."
+  (let* ((candidates)
          (idx 0))
     (seq-doseq (src sources)
       (let* ((name (and (plist-member src :name) (plist-get src :name)))
@@ -1306,36 +1389,19 @@ the candidates for the sync source
               (progn
                 (when (functionp items)
                   (cond
-                   ((and (integerp (cdr (func-arity items))) (< (cdr (func-arity items)) 1))
-                    (setq items (funcall items))
-                    (aset candidates idx
-                          (and items (consult-web--multi-propertize
-                                      items cat idx face))))
-                   ((eq async-type 'sync)
-                    (setq items (funcall items input))
-                    (aset candidates idx
-                          (and items (consult-web--multi-propertize
-                                      items cat idx face))))
-                   ((eq async-type 'async)
-                    (if input (funcall items input
-                                       :callback (lambda (response-items)
-                                                   (if response-items
-                                                       (setq current
-                                                             (and response-items (consult-web--multi-propertize
-                                                                                  response-items cat idx face)))
-                                                     (setq current t)))
-                                       args))
-                    (let ((count 0)
-                          (max consult-web-default-timeout)
-                          (step 0.05))
+                   (; sync source, append candidates right away
+                    (eq async-type 'sync)
+                    (push (consult-web--multi-static-sync-candidates src idx input args) candidates)
+                    )
+                   (; dynamic source, append candidates and wait for it to populate
+                    (eq async-type 'dynamic)
+                    (push (consult-web--multi-static-dynamic-candidates src idx input args) candidates)
+                    )
+                   (; async source, append candidates from process
+                    (eq async-type 'async)
+                    (push (consult-web--multi-static-async-candidates src idx input args) candidates)
+                    )
 
-                      (while (and (< count max) (not current))
-                        (+ count step)
-                        (if (>= count max)
-                            (message "consult-web: Hmmm! %s took longer than expected." (plist-get src :name))
-                          (sit-for step)))
-
-                      (aset candidates idx current)))
                    (t
                     (message "source %s needs a :type keyword. See the documentation for `consult-web-define-source'." name)
                     ))))
@@ -1346,14 +1412,18 @@ the candidates for the sync source
                         (format "error in calling :items of %s source" name)))
              nil)
             )))
-      (cl-incf idx)
-      (setq current nil))
-    (apply #'append (append candidates nil))))
+      (cl-incf idx))
+   (apply #'append candidates)))
 #+end_src
+
+#+RESULTS:
+: consult-web--multi-candidates-static
+
 ***** consult-web--multi-static
 #+begin_src emacs-lisp
 (defun consult-web--multi-static (sources input args &rest options)
-  (let* ((sources (consult--multi-enabled-sources sources))
+  ""
+(let* ((sources (consult--multi-enabled-sources sources))
          (candidates (consult--slow-operation "Give me a few seconds. The internet is a big mess!" (consult-web--multi-candidates-static sources input args)))
          (selected
           (apply #'consult--read
@@ -1380,7 +1450,6 @@ the candidates for the sync source
       (setq selected `(,(car selected) :match t ,@(cdr selected))))
     selected))
 #+end_src
-
 
 **** consult-web-multi-dynamic
 ***** multi-lookup
@@ -1419,7 +1488,7 @@ the candidates for the sync source
 #+end_src
 ***** muli-group
 #+begin_src emacs-lisp
-(defun consult-web--multi-group (sources cand transform)
+(defun consult-web--multi-group (sources cand &optional transform)
   "Return group string of candidate CAND.
 
 Returns the group string for candidate or transforms it
@@ -2313,15 +2382,15 @@ without any callback action.
 "
   (interactive "P")
   (let* ((input (or input
-                    (and consult-web-default-autosuggest-command (funcall-interactively consult-web-default-autosuggest-command))
+                    (and consult-web-default-autosuggest-command (funcall consult-web-default-autosuggest-command))
                     (consult-web--read-search-string)))
          (sources (or sources consult-web-static-sources))
-         (sources (remove nil (mapcar (lambda (source) (plist-get (cdr (assoc source consult-web-sources-alist)) :source)) sources)))
-         (prompt (concat "[" (propertize "consult-web-sync" 'face 'consult-web-prompt-face) "]" " Search:  "))
+         (sources (remove nil (mapcar (lambda (source) (consult-web--get-source-prop source :source))  sources)))
+         (prompt (concat "[" (propertize "consult-web-static" 'face 'consult-web-prompt-face) "]" " Search:  "))
          (selected
           (car-safe (consult-web--multi-static sources
                                                input
-                                               nil
+                                               args
                                                :prompt prompt
                                                :history 'consult-web--selection-history
                                                :sort t
