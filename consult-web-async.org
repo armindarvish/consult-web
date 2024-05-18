@@ -1283,7 +1283,7 @@ the candidates for the sync source
         (string-match (concat ".*" (string-trim (car-safe (consult-web--split-command (minibuffer-contents-no-properties))) split-char "\n") ".*") (substring-no-properties cand))))))
 #+end_src
 **** consult-web-multi-static
-***** static collect static sync candidates
+***** static collect sync candidates
 #+begin_src emacs-lisp
 (defun consult-web--multi-static-sync-candidates (source idx input &rest args)
   (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
@@ -1300,7 +1300,7 @@ the candidates for the sync source
     ))
 #+end_src
 
-***** static collect static dynamic candidates
+***** static collect dynamic candidates
 #+begin_src emacs-lisp
 (defun consult-web--multi-static-dynamic-candidates (source idx input &rest args)
   (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
@@ -1332,7 +1332,7 @@ the candidates for the sync source
 
 
 
-***** static collect static async candidates
+***** static collect async candidates
 #+begin_src emacs-lisp
 (defun consult-web--multi-static-async-candidates (source idx input &rest args)
   (let* ((name (plist-get source :name))
