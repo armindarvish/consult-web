@@ -34,6 +34,7 @@
             'consult-web-grep
             'consult-web-ripgrep
             'consult-web-gptel
+            'consult-web-invidious
             'consult-web-line-multi
             'consult-web-mu4e
             'consult-web-notes

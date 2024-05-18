@@ -509,7 +509,14 @@ PREFIXES is a list of chars for each magnitue
 (e.g. '(“” “K” “M” “G” ...) for none, kilo, mega, giga, ...
 "
   (let* ((power (if (and base (numberp base)) (float base) 1000.0))
-	(prefixes (or prefixes '("" "k" "M" "G" "T" "P" "E" "Z" "Y" "R" "Q"))))
+	(prefixes (or prefixes '("" "k" "M" "G" "T" "P" "E" "Z" "Y" "R" "Q")))
+        (number (pcase number
+                 ((pred numberp)
+                  number)
+                 ((pred stringp)
+                  (string-to-number number))
+                 (_ 0))))
+
     (while (and (>= number power) (cdr prefixes))
       (setq number (/ number power)
 	    prefixes (cdr prefixes)))

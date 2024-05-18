@@ -59,7 +59,7 @@ FACE is the face to apply to TITLE
          (date (propertize (or (and (stringp date) date) (make-string 10 ?\s)) 'face 'consult-web-date-face))
          (channeltitle (and channeltitle (stringp channeltitle) (propertize channeltitle 'face 'consult-web-path-face)))
          (channeltitle (consult-web--set-string-width channeltitle (* 2 frame-width-percent)))
-         (snippet (if (stringp snippet) (consult-web--set-string-width snippet (* 2 frame-width-percent))))
+         (snippet (if (stringp snippet) (consult-web--set-string-width (replace-regexp-in-string "\n" "  " snippet) (* 2 frame-width-percent))))
          (snippet (and snippet (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
          (face (or (consult-web--get-source-prop source :face) face 'consult-web-default-face))
          (title-str (and title (propertize title 'face face)))
