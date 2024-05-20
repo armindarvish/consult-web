@@ -320,6 +320,17 @@ This is used in dynamic collection to change grouping.")
   (rx (or "\r\n\r\n" "\n\n"))
   "Regular expression matching the end of HTTP headers.")
 
+(defvar consult-web-async-processes (list)
+  "List of processes for async candidates colleciton")
+
+
+(defvar consult-web-dynamic-timers (list)
+  "List of timers for dynamic candidates colleciton")
+
+(defvar consult-web--async-log-buffer " *consult-web--async-log*"
+ "name of buffer for logging async processes info")
+
+
 #+end_src
 
 *** define faces
@@ -554,7 +565,14 @@ PREFIXES is a list of chars for each magnitue
 (e.g. '(“” “K” “M” “G” ...) for none, kilo, mega, giga, ...
 "
   (let* ((power (if (and base (numberp base)) (float base) 1000.0))
-	(prefixes (or prefixes '("" "k" "M" "G" "T" "P" "E" "Z" "Y" "R" "Q"))))
+	(prefixes (or prefixes '("" "k" "M" "G" "T" "P" "E" "Z" "Y" "R" "Q")))
+        (number (pcase number
+                 ((pred numberp)
+                  number)
+                 ((pred stringp)
+                  (string-to-number number))
+                 (_ 0))))
+
     (while (and (>= number power) (cdr prefixes))
       (setq number (/ number power)
 	    prefixes (cdr prefixes)))
@@ -620,7 +638,7 @@ Ommits keys in IGNORE-KEYS."
 ****** url retrieve  backend
 ******* log
 #+begin_src emacs-lisp
-(defun consult-web--log (string)
+(defun consult-web--url-log (string)
   "Logs the response from `consult-web-url-retrieve-sync' in `consult-web-log-buffer-name'."
    (with-current-buffer (get-buffer-create consult-web-log-buffer-name)
      (goto-char (point-min))
@@ -735,9 +753,9 @@ and `consult-web-url-queue-timeout', respectively.
                 (when consult-web-log-level
                   (cond
                    ((eq consult-web-log-level 'info)
-                    (consult-web--log (format "URL: %s\nRESPONSE: %s" url response)))
+                    (consult-web--url-log (format "URL: %s\nRESPONSE: %s" url response)))
                    ((eq consult-web-log-level 'debug)
-                    (consult-web--log (format "URL: %s\n\nRESPONSE-HEADER:\n%s\n\nRESPONSE-BODY: %s\n" url header body)))))
+                    (consult-web--url-log (format "URL: %s\n\nRESPONSE-HEADER:\n%s\n\nRESPONSE-BODY: %s\n" url header body)))))
                 (setf response-data (plist-put response-data :status response))
                 (delete-region (point-min) (+ end-of-headers 1))
                 (goto-char (point-min))
@@ -936,6 +954,17 @@ and removes the buffers that are killed from the list."
   (setq url-dead-buffer-list nil)
 )
 #+end_src
+
+**** log
+***** consult-web-async-log
+#+begin_src emacs-lisp
+(defun consult-web--async-log (formatted &rest args)
+  "Log FORMATTED ARGS to variable `consult-web--async-log-buffer'."
+  (with-current-buffer (get-buffer-create consult-web--async-log-buffer)
+    (goto-char (point-max))
+    (insert (apply #'format formatted args))))
+#+end_src
+
 
 **** get source prop
 #+begin_src emacs-lisp
@@ -1254,12 +1283,96 @@ the candidates for the sync source
         (string-match (concat ".*" (string-trim (car-safe (consult-web--split-command (minibuffer-contents-no-properties))) split-char "\n") ".*") (substring-no-properties cand))))))
 #+end_src
 **** consult-web-multi-static
+***** static collect sync candidates
+#+begin_src emacs-lisp
+(defun consult-web--multi-static-sync-candidates (source idx input &rest args)
+  (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
+         (cat (plist-get source :category))
+         (fun (plist-get source :items))
+         (items))
+    (when (functionp fun)
+      (cond
+       ((and (integerp (cdr (func-arity fun))) (< (cdr (func-arity fun)) 1))
+        (setq items (funcall fun)))
+       (t
+        (setq items (funcall fun input args)))))
+ (and items (consult-web--multi-propertize items cat idx face))
+    ))
+#+end_src
+
+***** static collect dynamic candidates
+#+begin_src emacs-lisp
+(defun consult-web--multi-static-dynamic-candidates (source idx input &rest args)
+  (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
+         (cat (plist-get source :category))
+         (name (plist-get source :name))
+         (fun (plist-get source :items))
+         (items)
+         (current))
+    (when (functionp fun)
+      (funcall fun input
+               :callback (lambda (response-items)
+                           (if response-items
+                               (setq current
+                                     (and response-items (consult-web--multi-propertize
+                                                          response-items cat idx face)))
+                             (setq current t)))
+               args)
+
+      (let ((count 0)
+           (max consult-web-default-timeout)
+           (step 0.05))
+       (while (and (< count max) (not current))
+         (+ count step)
+         (if (>= count max)
+             (message "consult-web: Hmmm! %s took longer than expected." name)
+           (sit-for step))))
+      current)))
+#+end_src
+
+
+
+***** static collect async candidates
+#+begin_src emacs-lisp
+(defun consult-web--multi-static-async-candidates (source idx input &rest args)
+  (let* ((name (plist-get source :name))
+         (builder (plist-get source :items))
+         (transform (consult-web--get-source-prop name :transform))
+         (props (seq-drop-while (lambda (x) (not (keywordp x))) args))
+         (proc)
+         (proc-buf)
+         (face (and (plist-member source :face) `(face ,(plist-get source :face))))
+         (consult-web--async-log-buffer (concat " *consult-web-async-log--" name "*"))
+         (cat (plist-get source :category))
+         (query (car (consult-web--split-command input)))
+         (cmd (funcall builder input))
+         (items))
+    (unless (stringp (car cmd))
+        (setq cmd (car cmd)))
+      (when cmd
+        (let* ((lines)
+               (process-adaptive-read-buffering nil)
+              (out (with-temp-buffer
+                          (set-buffer-file-coding-system 'cp1047)
+                          (list (apply 'call-process (car cmd) nil (current-buffer) nil (cdr cmd))
+                                (replace-regexp-in-string "" "\n"
+                                                   (buffer-string))))))
+          (if (eq (car out) 0)
+            (progn
+              (setq lines (mapcar (lambda (line) (propertize line :source name :title line :query query)) (cdr out)))
+              (when transform (setq lines (funcall transform lines query))))
+            (message "process %s returned error with code %s and message %s" name (car out) (cdr out)))
+
+          (consult-web--multi-propertize lines cat idx face)
+))))
+
+#+end_src
+
 ***** multi-candidates-static
 #+begin_src emacs-lisp
 (defun consult-web--multi-candidates-static (sources &optional input &rest args)
-  "Return `consult--multi' candidates from SOURCES."
-  (let* ((candidates (make-vector (length sources) nil))
-         (current)
+  "Return `consult--static' candidates from SOURCES."
+  (let* ((candidates)
          (idx 0))
     (seq-doseq (src sources)
       (let* ((name (and (plist-member src :name) (plist-get src :name)))
@@ -1277,36 +1390,19 @@ the candidates for the sync source
               (progn
                 (when (functionp items)
                   (cond
-                   ((and (integerp (cdr (func-arity items))) (< (cdr (func-arity items)) 1))
-                    (setq items (funcall items))
-                    (aset candidates idx
-                          (and items (consult-web--multi-propertize
-                                      items cat idx face))))
-                   ((eq async-type 'sync)
-                    (setq items (funcall items input))
-                    (aset candidates idx
-                          (and items (consult-web--multi-propertize
-                                      items cat idx face))))
-                   ((eq async-type 'async)
-                    (if input (funcall items input
-                                       :callback (lambda (response-items)
-                                                   (if response-items
-                                                       (setq current
-                                                             (and response-items (consult-web--multi-propertize
-                                                                                  response-items cat idx face)))
-                                                     (setq current t)))
-                                       args))
-                    (let ((count 0)
-                          (max consult-web-default-timeout)
-                          (step 0.05))
+                   (; sync source, append candidates right away
+                    (eq async-type 'sync)
+                    (push (consult-web--multi-static-sync-candidates src idx input args) candidates)
+                    )
+                   (; dynamic source, append candidates and wait for it to populate
+                    (eq async-type 'dynamic)
+                    (push (consult-web--multi-static-dynamic-candidates src idx input args) candidates)
+                    )
+                   (; async source, append candidates from process
+                    (eq async-type 'async)
+                    (push (consult-web--multi-static-async-candidates src idx input args) candidates)
+                    )
 
-                      (while (and (< count max) (not current))
-                        (+ count step)
-                        (if (>= count max)
-                            (message "consult-web: Hmmm! %s took longer than expected." (plist-get src :name))
-                          (sit-for step)))
-
-                      (aset candidates idx current)))
                    (t
                     (message "source %s needs a :type keyword. See the documentation for `consult-web-define-source'." name)
                     ))))
@@ -1317,14 +1413,18 @@ the candidates for the sync source
                         (format "error in calling :items of %s source" name)))
              nil)
             )))
-      (cl-incf idx)
-      (setq current nil))
-    (apply #'append (append candidates nil))))
+      (cl-incf idx))
+   (apply #'append candidates)))
 #+end_src
+
+#+RESULTS:
+: consult-web--multi-candidates-static
+
 ***** consult-web--multi-static
 #+begin_src emacs-lisp
 (defun consult-web--multi-static (sources input args &rest options)
-  (let* ((sources (consult--multi-enabled-sources sources))
+  ""
+(let* ((sources (consult--multi-enabled-sources sources))
          (candidates (consult--slow-operation "Give me a few seconds. The internet is a big mess!" (consult-web--multi-candidates-static sources input args)))
          (selected
           (apply #'consult--read
@@ -1351,7 +1451,6 @@ the candidates for the sync source
       (setq selected `(,(car selected) :match t ,@(cdr selected))))
     selected))
 #+end_src
-
 
 **** consult-web-multi-dynamic
 ***** multi-lookup
@@ -1390,17 +1489,25 @@ the candidates for the sync source
 #+end_src
 ***** muli-group
 #+begin_src emacs-lisp
-(defun consult-web--multi-group (sources cand transform)
+(defun consult-web--multi-group (sources cand &optional transform)
   "Return group string of candidate CAND.
 
 Returns the group string for candidate or transforms it
 for all the candidates given SOURCES."
-  (if transform cand
+  (if transform
+      cand
     (let* ((fun (and (plist-member (consult--multi-source sources cand) :group)
                      (plist-get (consult--multi-source sources cand) :group))))
       (cond
        ((functionp fun)
-        (funcall fun sources cand transform))
+        (let ((argnum (cdr (func-arity fun))))
+        (cond
+         ((or (stringp argnum) (and (numberp argnum) (> argnum 2)))
+              (funcall fun sources cand transform))
+         ((and (numberp argnum) (= argnum 2))
+          (funcall fun cand transform))
+         ((and (numberp argnum) (= argnum 1))
+          (funcall fun cand)))))
        ((stringp fun)
         fun)
        ((eq fun 'nil)
@@ -1479,261 +1586,242 @@ POS and CATEGORY are the group ID and category for these items."
           (funcall (eval fun) (cdr (get-text-property 0 'multi-category cand))))))
     ))
 #+end_src
-***** multi-dynamic-candidates-update
+***** update candidates for synchronous sources (sync elisp)
 #+begin_src emacs-lisp
-;; (defun consult-web--multi-dynamic-candidates-update (async sources candidates input &rest args)
-;;   "Dynamically updates CANDIDATES for multiple SOURCES
-
-;; ASYNC is the sink function
-;; SOURCES are sources
-;; CANDIDATES
-;; "
-;;     (let ((idx 0))
-;;       (seq-doseq (src sources)
-;;         (let* ((face (and (plist-member src :face) `(face ,(plist-get src :face))))
-;;                (name (plist-get src :name))
-;;                (cat (plist-get src :category))
-;;                (items (plist-get src :items))
-;;                (narrow (plist-get src :narrow))
-;;                (async-type (consult-web--get-source-prop name :type))
-;;                (narrow-type (or (car-safe narrow) narrow -1))
-;;                (err (if consult-web-log-level 'err nil))
-;;                (pos idx))
-;;           (when (or (eq consult--narrow narrow-type)
-;;                     (not (or consult--narrow (plist-get src :hidden))))
-;;             (condition-case err
-;;                 (progn
-;;                   (when (functionp items)
-;;                     (cond
-;;                      ((and (integerp (cdr (func-arity items))) (< (cdr (func-arity items)) 1))
-;;                       (setq items (funcall items))
-;;                       (aset candidates idx    ; sync source, refresh now
-;;                             (and items (consult-web--multi-propertize
-;;                                         items cat idx face)))
-;;                       (funcall async 'flush)
-;;                       (funcall async (delq nil (apply #'append  (append candidates nil))))
-;;                       )
-;;                      ((equal async-type 'sync)
-;;                       (setq items (funcall items input args))
-;;                       (aset candidates idx    ; sync source, refresh now
-;;                             (and items (consult-web--multi-propertize
-;;                                         items cat idx face)))
-;;                       (funcall async 'flush)
-;;                       (funcall async (delq nil (apply #'append  (append candidates nil))))
-;;                       )
-;;                      ((equal async-type 'async)
-;;                       (if input (funcall items input      ; async source, refresh in callback
-;;                                :callback (lambda (response-items)
-;;                                  (when response-items
-;;                                    (aset candidates pos
-;;                                          (consult-web--multi-propertize response-items cat pos face))
-;;                                    (funcall async 'flush)
-;;                                    (funcall async (delq nil (apply #'append  (append candidates nil))))
-;;                                    (funcall async 'refresh)
-;;                                    )) args)))
-;;                      (t
-;;                     (message "source %s needs a :type keyword. See the documentation for `consult-web-define-source'." name
-;;                    )))
-;;                     ))
-;;               ('excessive-lisp-nesting nil)
-;;               ('wrong-type-argument (message "error in calling :items of %s source - %s" name (error-message-string err)))
-;;               ('error
-;;                (message (if consult-web-log-level
-;;                             (format "error in calling :items of %s source - %s" name (error-message-string err))
-;;                           (format "error in calling :items of %s source" name)))
-;;              nil)
-;;               )))
-;;         (cl-incf idx))
-;;       (delq nil (apply #'append  (append candidates nil)))
-;;       ))
+(defun consult-web--multi-update-sync-candidates (async source idx action &rest args)
+  (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
+         (cat (plist-get source :category))
+         (fun (plist-get source :items))
+         (items))
+    (when (functionp fun)
+      (cond
+       ((and (integerp (cdr (func-arity fun))) (< (cdr (func-arity fun)) 1))
+        (setq items (funcall fun)))
+       (t
+        (setq items (funcall fun action args)))))
+    (funcall async (and items (consult-web--multi-propertize items cat idx face)))
+    (funcall async 'refresh)
+))
+#+end_src
 
 
-(defun consult-web--multi-dynamic-candidates-update (async sources input &rest args)
+
+
+
+
+
+***** update candidates for dynamic sources (async elisp)
+#+begin_src emacs-lisp
+(defun consult-web--multi-update-dynamic-candidates (async source idx action &rest args)
+  (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
+         (cat (plist-get source :category)))
+    (funcall (plist-get source :items) action
+             :callback (lambda (response-items)
+                         (when response-items
+                           (funcall async (consult-web--multi-propertize response-items cat idx face))
+                           (funcall async 'refresh)
+                           )) args)))
+#+end_src
+
+
+
+
+
+
+
+***** update candidates for async sources (async process)
+#+begin_src emacs-lisp
+(defun consult-web--multi-update-async-candidates (async source idx action &rest args)
+  ""
+  (let* ((name (plist-get source :name))
+         (builder (plist-get source :items))
+         (transform (consult-web--get-source-prop name :transform))
+         (props (seq-drop-while (lambda (x) (not (keywordp x))) args))
+         (proc)
+         (proc-buf)
+         (count)
+         (face (and (plist-member source :face) `(face ,(plist-get source :face))))
+         (consult-web--async-log-buffer (concat " *consult-web-async-log--" name "*"))
+         (cat (plist-get source :category))
+         (query (car (consult-web--split-command action)))
+         (args (funcall builder action)))
+    (unless (stringp (car args))
+        (setq args (car args)))
+      (when proc
+        (delete-process proc)
+        (kill-buffer proc-buf)
+        (setq proc nil proc-buf nil))
+      (when args
+        (let* ((rest "")
+               (proc-filter
+                (lambda (_ out)
+                  (let ((lines (split-string out "[\r\n]+")))
+                    (if (not (cdr lines))
+                        (setq rest (concat rest (car lines)))
+                      (setcar lines (concat rest (car lines)))
+                      (let* ((len (length lines))
+                             (last (nthcdr (- len 2) lines)))
+                        (setq rest (cadr last)
+                              count (+ count len -1))
+                        (setcdr last nil)
+                        (when lines
+                          (setq lines (mapcar (lambda (line) (propertize line :source name :title line :query query)) lines))
+                          (when transform (setq lines (funcall transform lines query)))
+                          (funcall async (consult-web--multi-propertize lines cat idx face))
+                          (funcall async 'refresh))
+                        )))))
+               (proc-sentinel
+                (lambda (_ event)
+                  (funcall async 'indicator
+                           (cond
+                            ((string-prefix-p "killed" event)   'killed)
+                            ((string-prefix-p "finished" event) 'finished)
+                            (t 'failed)))
+                  (when (and (string-prefix-p "finished" event) (not (equal rest "")))
+                    (cl-incf count)
+                    (funcall async (list rest)))
+                  (consult-web--async-log
+                   "consult--async-process sentinel: event=%s lines=%d\n"
+                   (string-trim event) count)
+                  (when (> (buffer-size proc-buf) 0)
+                    (with-current-buffer (get-buffer-create consult-web--async-log-buffer)
+                      (goto-char (point-max))
+                      (insert ">>>>> stderr >>>>>\n")
+                      (let ((beg (point)))
+                        (insert-buffer-substring proc-buf)
+                        (save-excursion
+                          (goto-char beg)
+                          (message #("%s" 0 2 (face error))
+                                   (buffer-substring-no-properties (pos-bol) (pos-eol)))))
+                      (insert "<<<<< stderr <<<<<\n")))))
+               (process-adaptive-read-buffering nil))
+          (funcall async 'indicator 'running)
+          (consult-web--async-log "consult--async-process started %S\n" args)
+          (setq count 0
+                proc-buf (generate-new-buffer (concat " *consult-web-async-stderr-" name "*"))
+                proc (apply #'make-process
+                            `(,@props
+                              :connection-type pipe
+                              :name ,(car args)
+                              ;; :stderr ,proc-buf
+                              :process-buffer ,proc-buf
+                              :noquery t
+                              :command ,args
+                              :filter ,proc-filter
+                              :sentinel ,proc-sentinel)))))
+    (when proc (add-to-list 'consult-web-async-processes `(,proc . ,proc-buf)))))
+#+end_src
+
+***** consult-web--multi-cancel
+#+begin_src emacs-lisp
+(defun consult-web--multi-cancel ()
+  (mapcar (lambda (proc) (when proc (delete-process (car proc))
+                               (kill-buffer (cdr proc))
+                               ))
+          consult-web-async-processes)
+  (setq consult-web-async-processes nil)
+  (mapcar (lambda (timer) (when timer (cancel-timer timer))) consult-web-dynamic-timers)
+  (setq consult-web-dynamic-timers nil))
+#+end_src
+
+
+***** consult-web--multi-update-candidates
+#+begin_src emacs-lisp
+
+(defun consult-web--multi-update-candidates (async sources action &rest args)
   "Dynamically updates CANDIDATES for multiple SOURCES
 
 ASYNC is the sink function
 SOURCES are sources
 INPUT is the input string to pass to SOURCES
 "
-    (let ((candidates (make-vector (length sources) nil))
-          (idx 0))
-      (seq-doseq (src sources)
-        (let* ((face (and (plist-member src :face) `(face ,(plist-get src :face))))
-               (name (plist-get src :name))
-               (cat (plist-get src :category))
-               (items (plist-get src :items))
-               (narrow (plist-get src :narrow))
-               (async-type (consult-web--get-source-prop name :type))
-               (narrow-type (or (car-safe narrow) narrow -1))
-               (err (if consult-web-log-level 'err nil))
-               (pos idx))
-          (when (or (eq consult--narrow narrow-type)
-                    (not (or consult--narrow (plist-get src :hidden))))
-            (condition-case err
-                (progn
-                  (when (functionp items)
-                    (cond
-                     (; sync source, append candidates now
-                      (and (integerp (cdr (func-arity items))) (< (cdr (func-arity items)) 1))
-                      (setq items (funcall items))
-                      (aset candidates idx
-                            (and items (consult-web--multi-propertize
-                                        items cat idx face)))
-                      (funcall async 'flush)
-                      (funcall async (delq nil (apply #'append  (append candidates nil))))
-                      )
-                     (; sync source with input arg, append candidates now
-                      (equal async-type 'sync)
-                      (setq items (funcall items input args))
-                      (aset candidates idx
-                            (and items (consult-web--multi-propertize
-                                        items cat idx face)))
-                      (funcall async 'flush)
-                      (funcall async (delq nil (apply #'append  (append candidates nil))))
-                      )
-                     (; async source, append candidates  in callback
-                      (equal async-type 'async)
-                      (if input (funcall items input
-                               :callback (lambda (response-items)
-                                 (when response-items
-                                   (aset candidates pos
-                                         (consult-web--multi-propertize response-items cat pos face))
-                                   (funcall async 'flush)
-                                   (funcall async (delq nil (apply #'append  (append candidates nil))))
-                                   (funcall async 'refresh)
-                                   )) args)))
-                     (t
-                    (message "source %s needs a :type keyword. See the documentation for `consult-web-define-source'." name
-                   )))
-                    ))
-              ('excessive-lisp-nesting nil) ;;Ignore errors on excessive nesting
-              ('wrong-type-argument nil) ;;Ignore errors on wrong-type-arguments
-              ('error ;; message other erros
-               (message (if consult-web-log-level
-                            (format "error in calling :items of %s source - %s" name (error-message-string err))
-                          (format "error in calling :items of %s source" name)))
-             nil)
-              )))
-        (cl-incf idx))
-      (delq nil (apply #'append  (append candidates nil)))
-      ))
+  (let ((idx 0))
+    (seq-doseq (src sources)
+      (let* ((name (plist-get src :name))
+             (items (plist-get src :items))
+             (narrow (plist-get src :narrow))
+             (async-type (consult-web--get-source-prop name :type))
+             (narrow-type (or (car-safe narrow) narrow -1))
+             (err (if consult-web-log-level 'err nil)))
+        (when (or (eq consult--narrow narrow-type)
+                  (not (or consult--narrow (plist-get src :hidden))))
+          (condition-case err
+              (progn
+                (when (functionp items)
+                  (cond
+                   (; sync source, append candidates right away
+                    (equal async-type 'sync)
+                    (consult-web--multi-update-sync-candidates async src idx action args)
+                    )
+                   (; async source, append candidatesin process
+                    (equal async-type 'async)
+                    (consult-web--multi-update-async-candidates async src idx action args)
+                    )
+                    (; dynamic source, append candidates in a callback function
+                     (equal async-type 'dynamic)
+                     (consult-web--multi-update-dynamic-candidates async src idx action args)
 
+                     )
+                    (t
+                     (message "source %s needs a :type keyword. See the documentation for `consult-web-define-source'." name
+                              )))
+                   ))
+                ('error ;; message other erros
+                 (funcall async 'indicator 'killed)
+                 (message (if consult-web-log-level
+                              (format "error in calling :items of %s source - %s" name (error-message-string err))
+                            (format "error in calling :items of %s source" name)))
+                 nil)
+                )))
+        (cl-incf idx))
+      ))
 #+end_src
 
-***** multi-dynamic-compute
-
+***** collect candidates form multiple sources
 #+begin_src emacs-lisp
-
-;; (defun consult-web--multi-dynamic-compute (async sources &rest args)
-;;   "Dynamic computation of candidates.
-;; ASYNC is the sink
-;; SOURCES is list of sources to use
-;; "
-;;   (setq async (consult--async-indicator async))
-;;   (let* ((request) (current) (timer)
-;;          (debounce consult-web-dynamic-input-debounce)
-;;          (cancel (lambda () (when timer (cancel-timer timer) (setq timer nil))))
-;;          (start (lambda (req) (setq request req) (funcall async 'refresh)))
-;;          (fun (apply-partially #'consult-web--multi-dynamic-candidates-update async sources))
-;;          )
-;;     (lambda (action)
-;;       (pcase action
-;;         ((and 'nil (guard (not request)))
-;;          (funcall async nil))
-;;         ('nil
-;;          (funcall cancel)
-;;          (let ((state 'killed))
-;;            (unwind-protect
-;;                (progn
-;;                  (funcall async 'indicator 'running)
-;;                  (redisplay)
-;;                  ;; Run computation
-;;                  (let* ((response (funcall fun candidates request args)))
-;;                    ;; Flush and update candidate list
-;;                        (if (or (equal response 'nil) (equal response [nil]))
-;;                            (funcall async 'flush)
-;;                          (funcall async 'nil)
-;;                          )
-;;                        (setq state 'finished
-;;                          current request)
-;;                      ))
-;;              (funcall async 'indicator state)
-;;              ;; If the computation was killed, restart it after some time.
-;;              (when (eq state 'killed)
-;;                (setq timer (run-at-time debounce nil start request)))
-;;              (setq request nil))))
-;;         ((pred stringp)
-;;          (funcall cancel)
-;;          (if (or (equal action "") (equal action current))
-;;                (funcall async 'indicator 'finished)
-;;            ;; When there is new input start fetching candidates.
-;;            (funcall start action)
-;;            ))
-;;         ('destroy
-;;          (funcall cancel)
-;;          (funcall async 'destroy))
-;;         (_ (funcall async action))))))
-
-
-
-(defun consult-web--multi-dynamic-compute (async sources &rest args)
+(defun consult-web--multi-dynamic-collection (async sources &rest args)
   "Dynamic computation of candidates.
 ASYNC is the sink
 SOURCES is list of sources to use
 "
   (setq async (consult--async-indicator async))
-  (let* ((request) (current) (timer)
-         (debounce consult-web-dynamic-input-debounce)
-         (candidates (make-vector (length sources) nil))
-         (cancel (lambda () (when timer (cancel-timer timer) (setq timer nil))))
-         (start (lambda (req) (setq request req) (funcall async 'refresh)))
-         (fun (apply-partially #'consult-web--multi-dynamic-candidates-update async sources))
-         )
+  (let ((consult-web-async-processes (list))
+        (consult-web-dynamic-timers (list))
+        (current))
     (lambda (action)
       (pcase action
-        ((and 'nil (guard (not request)))
-         (funcall async nil))
         ('nil
-         (funcall cancel)
-         (let ((state 'killed))
-           (unwind-protect
-               (progn
-                 (funcall async 'indicator 'running)
-                 (redisplay)
-                 ;; Run computation
-                 (let* ((response (funcall fun request args)))
-                   ;; Flush and update candidate list
-                       (if (or (equal response 'nil) (equal response [nil]))
-                           (funcall async 'flush)
-                         (funcall async 'nil)
-                         )
-                       (setq state 'finished
-                         current request)
-                     ))
-             (funcall async 'indicator state)
-             ;; If the computation was killed, restart it after some time.
-             (when (eq state 'killed)
-               (setq timer (run-at-time debounce nil start request)))
-             (setq request nil))))
+         (funcall async nil))
+        (""
+         (setq current nil)
+         (consult-web--multi-cancel)
+         (funcall async 'flush)
+         (funcall async 'indicator 'finished)
+         )
         ((pred stringp)
-         (funcall cancel)
-         (if (or (equal action "") (equal action current))
-               (funcall async 'indicator 'finished)
-           ;; When there is new input start fetching candidates.
-           (funcall start action)
-           ))
+         (if (equal action current)
+             (funcall async 'indicator 'finished)
+           (progn
+             (setq current action)
+             (consult-web--multi-update-candidates async sources action args)
+             (funcall async 'refresh))))
         ('destroy
-         (funcall cancel)
+         (consult-web--multi-cancel)
          (funcall async 'destroy))
         (_ (funcall async action))))))
 #+end_src
-***** dynamic collection
+
+
+
+***** dynamic command
 #+begin_src emacs-lisp
-(defun consult-web--multi-dynamic-collection (sources &rest args)
+(defun consult-web--multi-dynamic-command (sources &rest args)
 "Dynamic collection with input splitting on multiple SOURCES."
+(declare (indent 1))
 (thread-first
   (consult--async-sink)
-  (consult-web--multi-dynamic-compute sources)
+  (consult--async-refresh-timer)
+  (consult-web--multi-dynamic-collection sources args)
   (consult--async-throttle)
   (consult--async-split)))
 #+end_src
@@ -1750,7 +1838,7 @@ See `consult--multi' for more info.
  (let* ((sources (consult-web--multi-enabled-sources sources))
          (selected
           (apply #'consult--read
-                 (consult-web--multi-dynamic-collection sources args)
+                 (consult-web--multi-dynamic-command sources args)
                  (append
                   options
                   (list
@@ -1774,6 +1862,8 @@ See `consult--multi' for more info.
       (setq selected `(,(car selected) :match t ,@(cdr selected))))
     selected))
 #+end_src
+
+
 ** Macro
 *** make a variable for source
 **** make symbol for source name
@@ -1922,7 +2012,7 @@ Do not use this function directly, use `consult-web-define-source' macro
 #+begin_src emacs-lisp
 ;;; Macros
 ;;;###autoload
-(cl-defmacro consult-web-define-source (source-name &rest args &key type request on-preview on-return state on-callback lookup dynamic group narrow-char category search-history selection-history face annotate preview-key docstring enabled sort predicate &allow-other-keys)
+(cl-defmacro consult-web-define-source (source-name &rest args &key type request transform on-preview on-return state on-callback lookup dynamic group narrow-char category search-history selection-history face annotate preview-key docstring enabled sort predicate &allow-other-keys)
   "Macro to make a consult-web-source for SOURCE-NAME.
 
 \* Makes
@@ -2062,8 +2152,8 @@ variable that this macro creates for %s=SOURCE-NAME.
   `(progn
 
      ;; make a variable called consult-web--source-%s (%s=source-name)
-     (defvar ,(consult-web--source-name source-name) (consult-web--make-source-list ,source-name ,request ,annotate ,face ,narrow-char ,state ,preview-key ,category ,lookup ,group ,sort ,enabled ,predicate ,selection-history))
-
+     (defvar ,(consult-web--source-name source-name) nil)
+     (setq ,(consult-web--source-name source-name) (consult-web--make-source-list ,source-name ,request ,annotate ,face ,narrow-char ,state ,preview-key ,category ,lookup ,group ,sort ,enabled ,predicate ,selection-history))
       ;; make a dynamic interactive command consult-web-dynamic-%s (%s=source-name)
      (if ,dynamic
          (defun ,(consult-web--func-name source-name) (&optional initial no-callback &rest args)
@@ -2087,6 +2177,7 @@ variable that this macro creates for %s=SOURCE-NAME.
                                                                 :source (consult-web--source-name ,source-name)
                                                                 :face ,face
                                                                 :request-func ,request
+                                                                :transform ,transform
                                                                 :on-preview (or ,on-preview #'consult-web--default-url-preview)
                                                                 :on-return (or ,on-return #'identity)
                                                                 :on-callback (or ,on-callback #'consult-web--default-callback)
@@ -2292,15 +2383,16 @@ without any callback action.
 "
   (interactive "P")
   (let* ((input (or input
-                    (and consult-web-default-autosuggest-command (funcall-interactively consult-web-default-autosuggest-command))
+                    (and consult-web-default-autosuggest-command  (funcall consult-web-default-autosuggest-command))
                     (consult-web--read-search-string)))
+         (input (if (stringp input) (substring-no-properties input)))
          (sources (or sources consult-web-static-sources))
-         (sources (remove nil (mapcar (lambda (source) (plist-get (cdr (assoc source consult-web-sources-alist)) :source)) sources)))
-         (prompt (concat "[" (propertize "consult-web-sync" 'face 'consult-web-prompt-face) "]" " Search:  "))
+         (sources (remove nil (mapcar (lambda (source) (consult-web--get-source-prop source :source))  sources)))
+         (prompt (concat "[" (propertize "consult-web-static" 'face 'consult-web-prompt-face) "]" " Search:  "))
          (selected
           (car-safe (consult-web--multi-static sources
                                                input
-                                               nil
+                                               args
                                                :prompt prompt
                                                :history 'consult-web--selection-history
                                                :sort t
@@ -2636,14 +2728,21 @@ Gets the preview function from `consult-web-sources-alist'."
             'consult-web-browser-history
             'consult-web-buffer
             'consult-web-chatgpt
+            'consult-web-consult-notes
             'consult-web-doi
             'consult-web-duckduckgo
             'consult-web-elfeed
+            'consult-web-gh
             'consult-web-google
             'consult-web-google-autosuggest
+            'consult-web-grep
+            'consult-web-ripgrep
             'consult-web-gptel
+            'consult-web-invidious
             'consult-web-line-multi
+            'consult-web-mu4e
             'consult-web-notes
+            'consult-web-notmuch
             'consult-web-pubmed
             'consult-web-scopus
             'consult-web-stackoverflow
@@ -2813,7 +2912,7 @@ See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/i
 
 (consult-web-define-source "chatGPT"
                            :narrow-char ?G
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-ai-source-face
                            :request #'consult-web--chatgpt-fetch-results
                            :preview-key consult-web-preview-key
@@ -2930,7 +3029,7 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
 
 (consult-web-define-source "Bing"
                            :narrow-char ?m
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--bing-fetch-results
                            :preview-key consult-web-preview-key
@@ -3047,7 +3146,7 @@ See URL `https://brave.com/search/api/' for more info"
 ;; Define the Brave Source
 (consult-web-define-source "Brave"
                            :narrow-char ?b
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--brave-fetch-results
                            :preview-key consult-web-preview-key
@@ -3092,6 +3191,15 @@ See URL `https://brave.com/search/api/' for more info"
 ;;; Code:
 
 (require 'consult-web)
+#+end_src
+**** return
+#+begin_src emacs-lisp
+(defun consult-web--brave-autosuggest-return (cand)
+  "Return the string of CAND with no properties
+"
+(when (stringp cand)
+  (substring-no-properties (string-trim cand))))
+
 #+end_src
 **** brave autosuggest
 #+begin_src emacs-lisp
@@ -3164,12 +3272,12 @@ See URL `https://brave.com/search/api/' for more info"
 
 (consult-web-define-source "Brave AutoSuggest"
                            :narrow-char ?B
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--brave-autosuggest-fetch-results
                            :group #'consult-web--group-function
                            :on-preview #'ignore
-                           :on-return #'string-trim
+                           :on-return #'consult-web--brave-autosuggest-return
                            :on-callback #'string-trim
                            :search-history 'consult-web--search-history
                            :selection-history t
@@ -3330,14 +3438,14 @@ SNIPPET is a string containing a snippet/description of candidate
 #+end_src
 
 **** items
-#+begin_src emacs-lisp :lexical t
+#+begin_src emacs-lisp
 (defun consult-web--line-multi-candidates (input &optional buffers)
   "Wrapper around consult--line-multi-candidates for consult-web."
   (let  ((buffers (or buffers (consult--buffer-query :directory (consult--normalize-directory default-directory) :sort 'alpha-current))))
     (consult--line-multi-candidates buffers input)))
 #+end_src
 **** fetch-results
-#+begin_src emacs-lisp :lexical t
+#+begin_src emacs-lisp
 
 (cl-defun consult-web--line-multi-fetch-results (input &rest args &key callback &allow-other-keys)
   "Fetches search results for INPUT from `consult-line-multi'."
@@ -3347,7 +3455,7 @@ SNIPPET is a string containing a snippet/description of candidate
                (opts (car-safe opts))
                (items (consult-web--line-multi-candidates query))
                (annotated-results (mapcar (lambda (item)
-                                            (let* ((source "Line Multi")
+                                            (let* ((source "buffers text search")
                                                    (marker  (consult--get-location item))
                                                    (title (substring-no-properties item 0 -1))
                                                    (decorated (consult-web--line-multi-format-candidate :source source :query query :marker marker :title title)))
@@ -3415,7 +3523,7 @@ FACE is the face to apply to TITLE"
 **** define source
 #+begin_src emacs-lisp
 
-(consult-web-define-source "Line Multi"
+(consult-web-define-source "buffers text search"
                            :narrow-char ?L
                            :type 'sync
                            :category 'consult-location
@@ -3510,11 +3618,11 @@ FACE is the face to apply to TITLE"
 
 *** consult-notes
 :PROPERTIES:
-:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-notes.el
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-consult-notes.el
 :END:
 **** header
 #+begin_src emacs-lisp
-;;; consult-web-notes.el --- Consulting Notes -*- lexical-binding: t -*-
+;;; consult-web-consult-notes.el --- Consulting Consult Notes -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2024 Armin Darvish
 
@@ -3622,6 +3730,432 @@ FACE is the face to apply to TITLE"
 
 **** provide and footer
 #+begin_src emacs-lisp
+;;; provide `consult-web-consult-notes' module
+
+(provide 'consult-web-consult-notes)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-consult-notes)
+;;; consult-web-consult-notes.el ends here
+#+end_src
+
+
+
+*** consult-gh
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-gh.el
+:END:
+**** header
+
+#+begin_src emacs-lisp
+;;; consult-web-gh.el --- Consulting Github Client -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+(require 'consult-gh)
+#+end_src
+**** builder
+#+begin_src emacs-lisp
+(cl-defun consult-web--gh-search-repos-builder (input &rest args &key callback &allow-other-keys)
+  "makes builder command line args for “GitHub CLI”.
+"
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+               (opts (car-safe opts))
+               (count (plist-get opts :count))
+               (count (or (and (integerp count) count)
+                          (and count (string-to-number (format "%s" count)))
+                          consult-web-default-count))
+               (cmd (consult--build-args '("gh" "search" "repos")))
+               (cmd-opts (list "--limit" (format "%s" count)))
+               (`(,re . ,hl) (funcall consult--regexp-compiler query 'basic t)))
+      (when re
+        (cons (append cmd
+                      (list (string-join re " "))
+                      cmd-opts)
+              hl))))
+#+end_src
+**** preview
+#+begin_src emacs-lisp
+(defun consult-web--gh-preview (cand)
+  (when-let ((info (text-properties-at 0 (cdr (get-text-property 0 'multi-category cand))))
+             (repo (plist-get info :repo))
+             (query (plist-get info :query))
+             (match-str (consult--build-args query))
+             (buffer (get-buffer-create consult-gh-preview-buffer-name)))
+    (add-to-list 'consult-gh--preview-buffers-list buffer)
+    (consult-gh--repo-view (format "%s" repo) buffer)
+    (with-current-buffer buffer
+      (if consult-gh-highlight-matches
+          (cond
+           ((listp match-str)
+            (mapcar (lambda (item)
+                      (highlight-regexp item 'consult-gh-preview-match-face)) match-str))
+           ((stringp match-str)
+            (highlight-regexp match-str 'consult-gh-preview-match-face))
+           )))
+    (funcall (consult--buffer-preview) 'preview
+             buffer
+             )
+    ))
+#+end_src
+**** return
+#+begin_src emacs-lisp
+(defun consult-web--gh-callback (cand)
+  (funcall consult-gh-repo-action (cons cand (text-properties-at 0 (cdr (get-text-property 0 'multi-category cand))))))
+
+#+end_src
+**** consult-gh source
+#+begin_src emacs-lisp
+(consult-web-define-source "GitHub"
+                           :narrow-char ?G
+                           :type 'async
+                           :category 'consult-gh-repos
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--gh-search-repos-builder
+                           :on-preview #'consult-web--gh-preview
+                           :on-return #'identity
+                           :on-callback #'consult-web--gh-callback
+                           :preview-key consult-web-preview-key
+                           :search-history 'consult-web--search-history
+                           :selection-history 'consult-web--selection-history
+                           :group #'consult-web--group-function
+                           :sort t
+                           :dynamic 'both
+                           :transform (lambda (items &optional query) (mapcar (lambda (string)
+                                                                (consult-gh--repo-format string (or query "") t)) items))
+                           :annotate nil
+                           )
+#+end_src
+
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-gh' module
+
+(provide 'consult-web-gh)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-gh)
+;;; consult-web-gh.el ends here
+#+end_src
+
+
+*** consult-grep
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-grep.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-grep.el --- Consulting Grep Command -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+#+end_src
+
+**** grep-builder
+#+begin_src emacs-lisp
+(defun consult-web--grep-make-builder (make-builder &optional dir)
+(pcase-let* ((`(_ ,paths ,dir) (consult--directory-prompt "" dir))
+             (paths (if dir
+                        (mapcar (lambda (path) (file-truename (concat dir path))) paths)
+                      paths))
+             )
+(funcall make-builder paths)
+))
+#+end_src
+
+
+
+**** transform
+#+begin_src emacs-lisp
+(defun consult-web--grep-transform (candidates &optional query)
+(let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+      (file "")
+      (file-len 0)
+      (file-str "")
+      result)
+          (save-match-data
+            (dolist (str candidates)
+              (when (and (string-match consult--grep-match-regexp str)
+                         ;; Filter out empty context lines
+                         (or (/= (aref str (match-beginning 3)) ?-)
+                             (/= (match-end 0) (length str))))
+                ;; We share the file name across candidates to reduce
+                ;; the amount of allocated memory.
+                (unless (and (= file-len (- (match-end 1) (match-beginning 1)))
+                             (eq t (compare-strings
+                                    file 0 file-len
+                                    str (match-beginning 1) (match-end 1) nil)))
+                  (setq file (file-relative-name (match-string 1 str) (buffer-file-name)))
+                  (when (and file (stringp file) (> file-len (* frame-width-percent 2)))
+                    (setq file (consult-web--set-string-width file (* frame-width-percent 2) (* frame-width-percent 1))))
+                  (setq file-len (length file))
+
+                  )
+                (let* ((line (propertize (match-string 2 str) 'face 'consult-line-number))
+                       (ctx (= (aref str (match-beginning 3)) ?-))
+                       (sep (if ctx "-" ":"))
+                       (content (substring str (match-end 0)))
+                       (line-len (length line)))
+                  (when (length> content consult-grep-max-columns)
+                    ;; (setq content (substring content 0 consult-grep-max-columns))
+                    (setq content  (consult-web--set-string-width content consult-grep-max-columns))
+                    )
+                  (setq str (concat file sep line sep content))
+                  ;; Store file name in order to avoid allocations in `consult--prefix-group'
+                  (add-text-properties 0 file-len `(face consult-file consult--prefix-group ,file) str)
+                  ;; (put-text-property (1+ file-len) (+ 1 file-len line-len) 'face 'consult-line-number str)
+                  (when ctx
+                    (add-face-text-property (+ 2 file-len line-len) (length str) 'consult-grep-context 'append str))
+                  (push (propertize str :source "grep" :title query) result)))))
+          result))
+#+end_src
+
+
+
+**** preview
+#+begin_src emacs-lisp
+
+(defun consult-web--grep-preview (cand)
+  "Grep preview function."
+(funcall  (consult--jump-state) 'preview (consult--grep-position (cdr (get-text-property 0 'multi-category cand))))
+  )
+
+#+end_src
+
+**** callback
+#+begin_src emacs-lisp
+(defun consult-web--grep-callback (cand)
+  "Grep preview function."
+(funcall  (consult--jump-state) 'return (consult--grep-position (cdr (get-text-property 0 'multi-category cand))))
+  )
+#+end_src
+
+**** consult-web-grep-builder
+#+begin_src emacs-lisp
+(cl-defun consult-web--grep-builder (input &rest args &key callback &allow-other-keys)
+  "makes builder command line args for “grep”.
+"
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+               (opts (car-safe opts))
+               (count (plist-get opts :count))
+               (dir (plist-get opts :dir))
+               (dir (if dir (file-truename (format "%s" dir))))
+               (count (or (and (integerp count) count)
+                          (and count (string-to-number (format "%s" count)))
+                          consult-web-default-count))
+               (default-directory (or dir default-directory))
+               )
+   (funcall (consult-web--grep-make-builder #'consult--grep-make-builder dir) query)
+            ))
+#+end_src
+
+
+**** source
+#+begin_src emacs-lisp
+(consult-web-define-source "grep"
+                           :narrow-char ?r
+                           :type 'async
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--grep-builder
+                           :transform #'consult-web--grep-transform
+                           :on-preview #'consult-web--grep-preview
+                           :on-return #'identity
+                           :on-callback #'consult-web--grep-callback
+                           :preview-key consult-web-preview-key
+                           :search-history 'consult-web--search-history
+                           :selection-history 'consult-web--selection-history
+                           :group #'consult-web--group-function
+                           ;; :group #'consult--prefix-group
+                           :sort t
+                           :dynamic 'both
+                           :transform #'consult-web--ripgrep-transform
+                           :annotate nil
+                           )
+#+end_src
+
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-grep' module
+
+(provide 'consult-web-grep)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-grep)
+;;; consult-web-grep.el ends here
+#+end_src
+
+
+*** notes
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-notes.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-notes.el --- Consulting Note Files -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+(require 'consult-web-grep)
+#+end_src
+
+**** custom variables
+#+begin_src emacs-lisp
+(defcustom consult-web-notes-files (apply #'append
+                                     (when (bound-and-true-p consult-notes-file-dir-sources)
+                                     ;; dir sources
+                                     (apply #'append (mapcar #'cddr consult-notes-file-dir-sources)))
+                                     ;; org roam
+                                     (when (bound-and-true-p org-roam-directory)
+                                       (list (expand-file-name org-roam-directory)))
+                                     ;; denote
+                                     (when (bound-and-true-p denote-directory)
+                                       (list (expand-file-name denote-directory)))
+                                     ;; org agenda files
+                                     (when (bound-and-true-p consult-notes-org-headings-mode)
+                                       (list (mapcar #'expand-file-name consult-notes-org-headings-files))))
+"List of all note files for consult-web-notes."
+:type '(repeat :tag "list of files" string))
+
+(defcustom consult-web-notes-use-rg t
+"whether to use ripgrep when searching ntoes?"
+:type 'boolean)
+
+#+end_src
+
+**** consult-web-notes-builder
+#+begin_src emacs-lisp
+(cl-defun consult-web--notes-builder (input &rest args &key callback &allow-other-keys)
+  "makes builder command line args for “ripgrep”.
+"
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+               (opts (car-safe opts))
+               (count (plist-get opts :count))
+               (dir (plist-get opts :dir))
+               (dir (if dir (file-truename (format "%s" dir))))
+               (dir (or dir consult-web-notes-files))
+               (count (or (and (integerp count) count)
+                          (and count (string-to-number (format "%s" count)))
+                          consult-web-default-count))
+               )
+   (funcall (consult-web--grep-make-builder (if (and consult-web-notes-use-rg (executable-find "rg")) #'consult--ripgrep-make-builder #'consult--grep-make-builder) dir) query)
+            ))
+#+end_src
+
+
+**** transform
+#+begin_src emacs-lisp
+(defun consult-web--notes-transform (candidates &optional query)
+(let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+      (file "")
+      (file-len 0)
+      (file-str "")
+      result)
+          (save-match-data
+            (dolist (str candidates)
+              (when (and (string-match consult--grep-match-regexp str)
+                         ;; Filter out empty context lines
+                         (or (/= (aref str (match-beginning 3)) ?-)
+                             (/= (match-end 0) (length str))))
+                ;; We share the file name across candidates to reduce
+                ;; the amount of allocated memory.
+                (unless (and (= file-len (- (match-end 1) (match-beginning 1)))
+                             (eq t (compare-strings
+                                    file 0 file-len
+                                    str (match-beginning 1) (match-end 1) nil)))
+                  (setq file (match-string 1 str))
+                  ;; (setq file (file-truename file))
+                  ;; (if (> file-len (* frame-width-percent 2))
+                  ;;   (setq file-str (consult-web--set-string-width file (* frame-width-percent 2) (* frame-width-percent 1)))
+                  ;;   (setq file-str file))
+                  ;; (when (> file-len (* frame-width-percent 2))
+                  ;;   (setq file (consult-web--set-string-width file (* frame-width-percent 2) (* frame-width-percent 1))
+                  ;;                          ))
+
+                  ;; (propertize file-str 'face 'consult-file 'consult--prefix-group file)
+                  (setq file-len (length file))
+)
+                (let* ((line (propertize (match-string 2 str) 'face 'consult-line-number))
+                       (ctx (= (aref str (match-beginning 3)) ?-))
+                       (sep (if ctx "-" ":"))
+                       (content (substring str (match-end 0)))
+                       (line-len (length line)))
+                  (when (length> content consult-grep-max-columns)
+                    ;; (setq content (substring content 0 consult-grep-max-columns))
+                    (setq content  (consult-web--set-string-width content consult-grep-max-columns))
+                    )
+                  (setq str (concat file sep line sep content))
+
+                  ;; (setq str (concat content sep line sep (propertize (file-name-nondirectory file) 'face 'consult-file 'consult--prefix-group file)))
+                  ;; Store file name in order to avoid allocations in `consult--prefix-group'
+                  (add-text-properties 0 file-len `(face consult-file consult--prefix-group ,file) str)
+                  (put-text-property (1+ file-len) (+ 1 file-len line-len) 'face 'consult-line-number str)
+                  ;; (when ctx
+                  ;;   (add-face-text-property (+ 2 file-len line-len) (length str) 'consult-grep-context 'append str))
+                  (push (propertize str :source "Notes Search" :title query :file file) result)))))
+          result))
+#+end_src
+
+**** source
+#+begin_src emacs-lisp
+(consult-web-define-source "Notes Search"
+                           :narrow-char ?n
+                           :type 'async
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--notes-builder
+                           :transform #'consult-web--notes-transform
+                           :on-preview #'consult-web--grep-preview
+                           :on-return #'identity
+                           :on-callback #'consult-web--grep-callback
+                           :preview-key 'any
+                           :search-history 'consult-web--search-history
+                           :selection-history 'consult-web--selection-history
+                           :group #'consult-web--group-function
+                           ;;:group #'consult--prefix-group
+                           :sort t
+                           :dynamic 'both
+                           :annotate nil
+                           )
+#+end_src
+
+
+**** provide and footer
+#+begin_src emacs-lisp
 ;;; provide `consult-web-notes' module
 
 (provide 'consult-web-notes)
@@ -3630,6 +4164,402 @@ FACE is the face to apply to TITLE"
 ;;; consult-web-notes.el ends here
 #+end_src
 
+
+*** consult-mu
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-mu4e.el
+:END:
+**** header
+
+#+begin_src emacs-lisp
+;;; consult-web-mu4e.el --- Consulting Mu4e -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+(require 'consult-mu)
+#+end_src
+**** format
+#+begin_src emacs-lisp
+(defun consult-web-mu--format-candidate (cand highlight)
+  "Formats minibuffer candidates for `consult-mu'.
+
+CAND is the minibuffer completion candidate (a mu4e message collected by `consult-mu--dynamic-collection').
+
+if HIGHLIGHT is non-nil, it is highlighted with `consult-mu-highlight-match-face' in the minibuffer completion list."
+
+  (let* ((string (car cand))
+         (info (cadr cand))
+         (msg (plist-get info :msg))
+         (query (plist-get info :query))
+         (match-str (if (stringp query) (consult--split-escaped (car (consult--command-split query))) nil))
+         (headers-template (consult-mu--headers-template))
+         (str (if headers-template
+                 (consult-mu--expand-headers-template msg headers-template)
+                  string)
+         )
+         (str (propertize str :msg msg :query query :type :dynamic :source "mu4e" :title string))
+         )
+         (if (and consult-mu-highlight-matches highlight)
+                     (cond
+                      ((listp match-str)
+                       (mapcar (lambda (match) (setq str (consult-mu--highlight-match match str t))) match-str))
+                      ((stringp match-str)
+                       (setq str (consult-mu--highlight-match match-str str t))))
+           str)
+(when msg
+  (cons str (list :msg msg :query query :type :dynamic)))))
+
+#+end_src
+**** get mu search results
+#+begin_src emacs-lisp
+(cl-defun consult-web--mu-fetch-results (input &rest args &key callback &allow-other-keys)
+  "makes builder command line args for “GitHub CLI”.
+"
+  (save-mark-and-excursion
+  (consult-mu--execute-all-marks)
+  )
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+               (opts (car-safe opts))
+               (count (plist-get opts :count))
+               (count (or (and (integerp count) count)
+                          (and count (string-to-number (format "%s" count)))
+                          consult-web-default-count))
+               (mu-input (format "%s -- --maxnum %s" query count))
+               (messages)
+               )
+    (consult-mu--update-headers mu-input nil nil :dynamic)
+    (with-current-buffer consult-mu-headers-buffer-name
+      (goto-char (point-min))
+     (setq messages (remove nil
+              (cl-loop until (eobp)
+                       collect (let ((msg (ignore-errors (mu4e-message-at-point))))
+                                 (consult-web-mu--format-candidate `(,(buffer-substring (point) (point-at-eol)) (:msg ,(ignore-errors (mu4e-message-at-point)) :query ,input)) t))
+                 do (forward-line 1)))
+           ))
+    (when (and messages callback)
+      (funcall callback messages))))
+#+end_src
+**** preview
+
+#+begin_src emacs-lisp
+(defun consult-web--mu-preview (cand)
+  "Shows message from CAND in preview buffer"
+  (when-let* ((info (text-properties-at 0 (cdr (get-text-property 0 'multi-category cand))))
+              (msg (plist-get info :msg))
+              (query (plist-get info :query))
+              (msgid (substring-no-properties (plist-get msg :message-id)))
+              (match-str (car (consult--command-split query)))
+              (match-str (car (consult--command-split query)))
+              (mu4e-headers-buffer-name consult-mu-headers-buffer-name)
+              (buffer consult-mu-view-buffer-name))
+    ;;(get-buffer-create consult-mu-view-buffer-name)
+    (add-to-list 'consult-mu--view-buffers-list buffer)
+    (funcall (consult--buffer-preview) 'preview
+             (consult-mu--view msg t consult-mu-mark-previewed-as-read match-str)
+             )
+    (with-current-buffer consult-mu-view-buffer-name
+      (unless (one-window-p) (delete-other-windows))
+      ))
+  )
+#+end_src
+**** return
+#+begin_src emacs-lisp
+(defun consult-web--mu-return (cand)
+  "Clean up and return CAND"
+(save-mark-and-excursion
+  (consult-mu--execute-all-marks)
+  )
+(setq consult-mu--override-group nil)
+cand
+)
+#+end_src
+**** callback
+#+begin_src emacs-lisp
+(defun consult-web--mu-callback (cand)
+  "Get the msg back and run callback"
+  (let* ((info (text-properties-at 0 (cdr (get-text-property 0 'multi-category cand))))
+         (msg (plist-get info :msg))
+         (query (plist-get info :query))
+         (match-str (car (consult--command-split query)))
+         )
+    (consult-mu--view msg nil consult-mu-mark-viewed-as-read match-str)
+    (consult-mu-overlays-toggle consult-mu-view-buffer-name)
+    )
+)
+#+end_src
+**** consult-mu source
+#+begin_src emacs-lisp
+(consult-web-define-source "mu4e"
+                           :narrow-char ?m
+                           :type 'dynamic
+                           :category 'consult-mu-messages
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--mu-fetch-results
+                           :lookup #'consult-mu--lookup
+                           :on-preview #'consult-web--mu-preview
+                           :on-return #'consult-web--mu-return
+                           :on-callback #'consult-web--mu-callback
+                           :preview-key consult-web-preview-key
+                           :search-history 'consult-web--search-history
+                           :selection-history 'consult-web--selection-history
+                           :group #'consult-web--group-function
+                           :sort t
+                           :dynamic 'both
+                           :annotate nil
+                           )
+#+end_src
+
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-mu4e' module
+
+(provide 'consult-web-mu4e)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-gh)
+;;; consult-web-mu4e.el ends here
+#+end_src
+
+
+
+*** consult-notmuch
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-notmuch.el
+:END:
+**** header
+
+#+begin_src emacs-lisp
+;;; consult-web-notmuch.el --- Consulting Notmuch Command -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+(require 'consult-notmuch)
+#+end_src
+**** builder
+#+begin_src emacs-lisp
+(cl-defun consult-web--notmuch-command-builder (input &rest args &key callback &allow-other-keys)
+  "makes builder command line args for “GitHub CLI”.
+"
+  (setq consult-notmuch--partial-parse nil)
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+               (opts (car-safe opts)))
+  (consult-notmuch--command query)
+  ))
+#+end_src
+**** transform/format
+#+begin_src emacs-lisp
+(defun consult-web-notmuch--transformer (str &optional query)
+  "Transform STR to notmuch display style."
+  (let ((string (if consult-notmuch-show-single-message
+      (consult-notmuch--show-transformer str)
+    (consult-notmuch--search-transformer str))))
+    (if (stringp string)
+        (propertize string :source "notmuch" :query query))
+    ))
+
+#+end_src
+**** preview
+#+begin_src emacs-lisp
+(defun consult-web--notmuch--preview (cand)
+  "Preview CANDIDATE when ACTION is 'preview."
+  (when-let ((id (consult-notmuch--candidate-id (cdr (get-text-property 0 'multi-category cand)))))
+    (when (get-buffer consult-notmuch--buffer-name)
+      (kill-buffer consult-notmuch--buffer-name))
+    (consult-notmuch--show-id id consult-notmuch--buffer-name)))
+#+end_src
+**** return
+**** callback
+#+begin_src emacs-lisp
+(defun consult-web--notmuch-callback (cand)
+  (consult-notmuch--show (cdr (get-text-property 0 'multi-category cand))))
+#+end_src
+**** consult-notmuch source
+#+begin_src emacs-lisp
+(consult-web-define-source "notmuch"
+                           :narrow-char ?m
+                           :type 'async
+                           :category 'notmuch-result
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--notmuch-command-builder
+                           :on-preview #'consult-web--notmuch--preview
+                           :on-return #'identity
+                           :on-callback #'consult-web--notmuch-callback
+                           :preview-key consult-web-preview-key
+                           :search-history 'consult-web--search-history
+                           :selection-history 'consult-web--selection-history
+                           :group #'consult-web--group-function
+                           :sort t
+                           :dynamic 'both
+                           :transform (lambda (items &optional query) (remove nil (mapcar (lambda (string)
+                                                                (consult-web-notmuch--transformer string query)) items)))
+                           :annotate nil
+                           )
+#+end_src
+
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-notmuch' module
+
+(provide 'consult-web-notmuch)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-notmuch)
+;;; consult-web-notmuch.el ends here
+#+end_src
+
+*** consult-ripgrep
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-ripgrep.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-ripgrep.el --- Consulting Ripgrep Command -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.1
+;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+(require 'consult-web-grep)
+#+end_src
+
+**** consult-web-ripgrep-builder
+#+begin_src emacs-lisp
+(cl-defun consult-web--ripgrep-builder (input &rest args &key callback &allow-other-keys)
+  "makes builder command line args for “ripgrep”.
+"
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+               (opts (car-safe opts))
+               (count (plist-get opts :count))
+               (dir (plist-get opts :dir))
+               (dir (if dir (file-truename (format "%s" dir))))
+               (count (or (and (integerp count) count)
+                          (and count (string-to-number (format "%s" count)))
+                          consult-web-default-count))
+               (default-directory (or dir default-directory))
+               )
+   (funcall (consult-web--grep-make-builder #'consult--ripgrep-make-builder dir) query)
+            ))
+#+end_src
+
+
+**** transform
+#+begin_src emacs-lisp
+(defun consult-web--ripgrep-transform (candidates &optional query)
+(let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+      (file "")
+      (file-len 0)
+      (file-str "")
+      result)
+          (save-match-data
+            (dolist (str candidates)
+              (when (and (string-match consult--grep-match-regexp str)
+                         ;; Filter out empty context lines
+                         (or (/= (aref str (match-beginning 3)) ?-)
+                             (/= (match-end 0) (length str))))
+                ;; We share the file name across candidates to reduce
+                ;; the amount of allocated memory.
+                (unless (and (= file-len (- (match-end 1) (match-beginning 1)))
+                             (eq t (compare-strings
+                                    file 0 file-len
+                                    str (match-beginning 1) (match-end 1) nil)))
+                  (setq file (file-relative-name (match-string 1 str) (buffer-file-name)))
+                  (when (and file (stringp file) (> file-len (* frame-width-percent 2)))
+                    (setq file (consult-web--set-string-width file (* frame-width-percent 2) (* frame-width-percent 1))))
+                  (setq file-len (length file))
+
+                  )
+                (let* ((line (propertize (match-string 2 str) 'face 'consult-line-number))
+                       (ctx (= (aref str (match-beginning 3)) ?-))
+                       (sep (if ctx "-" ":"))
+                       (content (substring str (match-end 0)))
+                       (line-len (length line)))
+                  (when (length> content consult-grep-max-columns)
+                    ;; (setq content (substring content 0 consult-grep-max-columns))
+                    (setq content  (consult-web--set-string-width content consult-grep-max-columns))
+                    )
+                  (setq str (concat file sep line sep content))
+                  ;; Store file name in order to avoid allocations in `consult--prefix-group'
+                  (add-text-properties 0 file-len `(face consult-file consult--prefix-group ,file) str)
+                  ;; (put-text-property (1+ file-len) (+ 1 file-len line-len) 'face 'consult-line-number str)
+                  (when ctx
+                    (add-face-text-property (+ 2 file-len line-len) (length str) 'consult-grep-context 'append str))
+                  (push (propertize str :source "ripgrep" :title query) result)))))
+          result))
+#+end_src
+
+#+begin_src emacs-lisp
+(file-relative-name "/Users/armin/projects/consult-web/README.org" (buffer-file-name))
+#+end_src
+
+
+
+**** source
+#+begin_src emacs-lisp
+(consult-web-define-source "ripgrep"
+                           :narrow-char ?r
+                           :type 'async
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--ripgrep-builder
+                           :transform #'consult-web--ripgrep-transform
+                           :on-preview #'consult-web--grep-preview
+                           :on-return #'identity
+                           :on-callback #'consult-web--grep-callback
+                           :preview-key consult-web-preview-key
+                           :search-history 'consult-web--search-history
+                           :selection-history 'consult-web--selection-history
+                           :group #'consult-web--group-function
+                           ;; :group #'consult--prefix-group
+                           :sort t
+                           :dynamic 'both
+                           :transform #'consult-web--ripgrep-transform
+                           :annotate nil
+                           )
+#+end_src
+
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-ripgrep' module
+
+(provide 'consult-web-ripgrep)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-ripgrep)
+;;; consult-web-ripgrep.el ends here
+#+end_src
 
 
 *** Doi.org
@@ -3825,7 +4755,7 @@ for some limited documentation"
 
 (consult-web-define-source "DuckDuckGo API"
                            :narrow-char ?d
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--duckduckgoapi-fetch-results
                            :preview-key consult-web-preview-key
@@ -4147,7 +5077,7 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
 
 (consult-web-define-source "Google"
                            :narrow-char ?g
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--google-fetch-results
                            :preview-key consult-web-preview-key
@@ -4251,7 +5181,7 @@ Uses `consult-web-google-autosuggest-api-url' as autosuggest api url."
 
 (consult-web-define-source "Google AutoSuggest"
                            :narrow-char ?G
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--google-autosuggest-fetch-results
                            :on-preview #'ignore
@@ -4553,7 +5483,7 @@ FACE is the face to apply to TITLE
          (date (propertize (or (and (stringp date) date) (make-string 10 ?\s)) 'face 'consult-web-date-face))
          (channeltitle (and channeltitle (stringp channeltitle) (propertize channeltitle 'face 'consult-web-path-face)))
          (channeltitle (consult-web--set-string-width channeltitle (* 2 frame-width-percent)))
-         (snippet (if (stringp snippet) (consult-web--set-string-width snippet (* 2 frame-width-percent))))
+         (snippet (if (stringp snippet) (consult-web--set-string-width (replace-regexp-in-string "\n" "  " snippet) (* 2 frame-width-percent))))
          (snippet (and snippet (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
          (face (or (consult-web--get-source-prop source :face) face 'consult-web-default-face))
          (title-str (and title (propertize title 'face face)))
@@ -4575,9 +5505,6 @@ FACE is the face to apply to TITLE
           (setq str (consult-web--highlight-match match-str str t)))))
     str))
 #+end_src
-
-#+RESULTS:
-: consult-web--invidious-format-candidate
 
 **** get servers
 #+begin_src emacs-lisp
@@ -4605,9 +5532,6 @@ FACE is the face to apply to TITLE
                       ) attrs))
 ))))))
 #+end_src
-
-#+RESULTS:
-: consult-web--invidious-get-servers
 
 **** invidious
 #+begin_src emacs-lisp
@@ -4709,7 +5633,7 @@ FACE is the face to apply to TITLE
 
 (consult-web-define-source "Invidious"
                            :narrow-char ?I
-                           :type 'async
+                           :type 'dynamic
                            :category 'consult-web-video
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--invidious-fetch-results
@@ -4723,9 +5647,6 @@ FACE is the face to apply to TITLE
                            :annotate nil
                            )
 #+end_src
-
-#+RESULTS:
-: Invidious
 
 **** provide and footer
 #+begin_src emacs-lisp
@@ -4984,7 +5905,7 @@ FACE is the face to apply to TITLE
 
 (consult-web-define-source "PubMed"
                            :narrow-char ?p
-                           :type 'async
+                           :type 'dynamic
                            :category 'consult-web-scholar
                            :face 'consult-web-scholar-source-face
                            :request #'consult-web--pubmed-fetch-results
@@ -5193,7 +6114,7 @@ See URL `https://dev.elsevier.com/documentation/SCOPUSSearchAPI.wadl' for more i
                            :narrow-char ?s
                            :category 'consult-web-scholar
                            :face 'consult-web-scholar-source-face
-                           :type 'async
+                           :type 'dynamic
                            :request #'consult-web--scopus-fetch-results
                            :preview-key consult-web-preview-key
                            :on-preview #'consult-web--scopus-preview
@@ -5368,7 +6289,7 @@ See URL `https://api.stackexchange.com/' for more info.
 
 (consult-web-define-source "StackOverflow"
                            :narrow-char ?s
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--stackoverflow-fetch-results
                            :preview-key consult-web-preview-key
@@ -5523,7 +6444,7 @@ SNIPPET is a string containing a snippet/description of candidate
 
 (consult-web-define-source "Wikipedia"
                            :narrow-char ?w
-                           :type 'async
+                           :type 'dynamic
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--wikipedia-fetch-results
                            :preview-key consult-web-preview-key
@@ -5532,7 +6453,7 @@ SNIPPET is a string containing a snippet/description of candidate
                            :enabled (lambda () (boundp  'consult-web-wikipedia-api-url))
                            :group #'consult-web--group-function
                            :sort t
-                           :type 'async
+                           :type 'dynamic
                            :dynamic 'both
                             )
 #+end_src
@@ -5595,7 +6516,7 @@ FACE is the face to apply to TITLE
          (date (and (stringp date) (propertize date 'face 'consult-web-date-face)))
          (channeltitle (and (stringp channeltitle) (propertize channeltitle 'face 'consult-web-path-face)))
          (channeltitle (consult-web--set-string-width channeltitle (* 2 frame-width-percent)))
-         (snippet (if (stringp snippet) (consult-web--set-string-width snippet (* 2 frame-width-percent))))
+         (snippet (if (stringp snippet) (consult-web--set-string-width (replace-regexp-in-string "\n" "  " snippet) (* 2 frame-width-percent))))
          (snippet (and snippet (stringp snippet) (propertize snippet 'face 'consult-web-snippet-face)))
          (videocount-str (and videocount (consult-web--numbers-human-readable (or videocount 0) "videos")))
          (viewcount-str (and viewcount (consult-web--numbers-human-readable (or viewcount 0) "views")))
@@ -5610,9 +6531,9 @@ FACE is the face to apply to TITLE
                       (_ "")) 10)
                      'face 'consult-web-domain-face)))
          (length (or
-                  (and (numberp length) length)
                   (and (equal type "playlist") "[PLAYLIST]")
-                  (and (equal type "channel") "(CHANNEL)")))
+                  (and (equal type "channel") "(CHANNEL)")
+                  (and (numberp length) (seconds-to-string length))))
          (length (and (stringp length) (consult-web--set-string-width (propertize length 'face 'consult-web-comment-face) 10)))
 
          (face (or (consult-web--get-source-prop source :face) face 'consult-web-default-face))
@@ -5634,15 +6555,16 @@ FACE is the face to apply to TITLE
           (setq str (consult-web--highlight-match match-str str t)))))
     str))
 #+end_src
-**** youtube search
+**** variables
 #+begin_src emacs-lisp
+(defvar consult-web-youtube-base-url "https://www.youtube.com/")
 (defvar consult-web-youtube-watch-url "https://www.youtube.com/watch")
-
 (defvar consult-web-youtube-channel-url "https://www.youtube.com/channel/")
-
 (defvar consult-web-youtube-search-results-url "https://www.youtube.com/results")
-
 (defvar consult-web-youtube-search-api-url "https://www.googleapis.com/youtube/v3/search")
+(defvar consult-web-youtube-videos-api-url "https://www.googleapis.com/youtube/v3/videos")
+(defvar consult-web-youtube-playlists-api-url "https://www.googleapis.com/youtube/v3/playlists")
+(defvar consult-web-youtube-channels-api-url "https://www.googleapis.com/youtube/v3/channels")
 
 (defcustom consult-web-youtube-search-key nil
   "Key for “YouTube Data API”
@@ -5653,7 +6575,17 @@ for details"
   :type '(choice (const :tag "API Key" string)
                  (function :tag "Custom Function")))
 
-(cl-defun consult-web--youtube-fetch-results (input &rest args &key callback &allow-other-keys)
+(defcustom consult-web-youtube-search-command #'consult-web--youtube-fetch-results-details
+  "Command to use to get results from “YouTube Data API”
+"
+  :group 'consult-web
+  :type '(choice (function :tag "(Default) Detailed Results with stats" #'consult-web--youtube-fetch-results-details)
+                 (function :tag "Simple Results without stats"  #'consult-web--youtube-fetch-results-simple)
+                 (function :tag "Custom Function")))
+#+end_src
+**** youtube search simple
+#+begin_src emacs-lisp
+(cl-defun consult-web--youtube-fetch-results-simple (input &rest args &key callback &allow-other-keys)
   "Fetches search results for INPUT from “YouTube Data API” service.
 "
   (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
@@ -5730,13 +6662,274 @@ for details"
                               (when annotated-results
                                 (funcall callback annotated-results))
                               annotated-results)))))
+#+end_src
+**** youtube search details
+***** youtube videos
+#+begin_src emacs-lisp
+(cl-defun consult-web--youtube-fetch-video-details (videoids &rest args &key callback query &allow-other-keys)
+  "Fetches search results for INPUT from “YouTube Data API” service.
+"
+  (pcase-let* ((params `(("part" . "snippet,statistics,contentDetails")
+                         ("key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key))
+                         ("id" . ,(string-join videoids ","))
+                         ))
+               (headers `(("Accept" . "application/json")
+                          ("Accept-Encoding" . "gzip")
+                          ("User-Agent" . "consult-web (gzip)")
+                          ("X-Goog-Api-Key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key)))))
+    (consult-web--fetch-url consult-web-youtube-videos-api-url consult-web-http-retrieve-backend
+                            :encoding 'utf-8
+                            :params params
+                            :headers headers
+                            :parser #'consult-web--json-parse-buffer
+                            :callback
+                            (lambda (attrs)
+                              (let* ((raw-results (gethash "items" attrs))
+                                     (annotated-results
+                                      (mapcar (lambda (item)
+                                                (let*
+                                                    ((source "YouTube")
+                                                     (videoid (gethash "id" item))
+                                                     (snippet (gethash "snippet" item))
+                                                     (contentdetails (gethash "contentDetails" item))
+                                                     (statistics (gethash "statistics" item))
+                                                     (channeltitle (gethash "channelTitle" snippet))
+                                                     (channelid (gethash "channelId" snippet))
+                                                     (title (gethash "title" snippet))
+                                                     (date (gethash "publishedAt" snippet))
+                                                     (date (format-time-string "%Y-%m-%d" (date-to-time date)))
+                                                     (url (consult-web--make-url-string consult-web-youtube-watch-url `(("v" . ,videoid))))
+                                                     (search-url (consult-web--make-url-string consult-web-youtube-search-results-url `(("search_query" . ,query))))
+                                                     (description (gethash "description" snippet))
+                                                     (duration (gethash "duration" contentdetails))
+                                                     (duration (if duration (iso8601-parse-duration duration)))
+                                                     (duration (if duration (+ (* (caddr duration) 2600) (* (cadr duration) 60) (car duration))))
+                                                     (viewcount (string-to-number (gethash "viewCount" statistics)))
+                                                     (decorated (consult-web--youtube-format-candidate :source source :type "video" :query query :title title :snippet description :channeltitle channeltitle :date date :length duration :viewcount viewcount)))
+                                                (propertize decorated
+                                                            :source source
+                                                            :title title
+                                                            :url url
+                                                            :search-url search-url
+                                                            :query query
+                                                            :snippet description
+                                                            :id videoid
+                                                            :channeltitle channeltitle
+                                                            :channelid channelid)))
 
+                                      raw-results)))
+                               (when annotated-results
+                                (when callback
+                                  (funcall callback annotated-results)))
+                              annotated-results)))))
+
+#+end_src
+
+***** youtube playlists
+#+begin_src emacs-lisp
+(cl-defun consult-web--youtube-fetch-playlist-details (playlistids &rest args &key callback query candidates &allow-other-keys)
+  "Fetches search results for INPUT from “YouTube Data API” service.
+"
+  (pcase-let* ((params `(("part" . "snippet,contentDetails")
+                         ("key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key))
+                         ("id" . ,(string-join playlistids ","))
+                         ))
+               (headers `(("Accept" . "application/json")
+                          ("Accept-Encoding" . "gzip")
+                          ("User-Agent" . "consult-web (gzip)")
+                          ("X-Goog-Api-Key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key)))))
+    (consult-web--fetch-url consult-web-youtube-playlists-api-url consult-web-http-retrieve-backend
+                            :encoding 'utf-8
+                            :params params
+                            :headers headers
+                            :parser #'consult-web--json-parse-buffer
+                            :callback
+                            (lambda (attrs)
+                              (let* ((raw-results (gethash "items" attrs))
+                                     (annotated-results
+                                      (mapcar (lambda (item)
+                                                (let*
+                                                    ((source "YouTube")
+                                                     (playlistid (gethash "id" item))
+                                                     (snippet (gethash "snippet" item))
+                                                     (contentdetails (gethash "contentDetails" item))
+                                                     (videocount (gethash "itemCount" contentdetails))
+                                                     (channeltitle (gethash "channelTitle" snippet))
+                                                     (channelid (gethash "channelId" snippet))
+                                                     (title (gethash "title" snippet))
+                                                     (date (gethash "publishedAt" snippet))
+                                                     (date (format-time-string "%Y-%m-%d" (date-to-time date)))
+                                                     (url (consult-web--make-url-string consult-web-youtube-watch-url `(("list" . ,playlistid))))
+                                                     (search-url (consult-web--make-url-string consult-web-youtube-search-results-url `(("search_query" . ,query))))
+                                                     (description (gethash "description" snippet))
+                                                     (decorated (consult-web--youtube-format-candidate :source source :type "playlist" :query query :title title :snippet description :channeltitle channeltitle :date date :videocount videocount)))
+                                                (propertize decorated
+                                                            :source source
+                                                            :title title
+                                                            :url url
+                                                            :search-url search-url
+                                                            :query query
+                                                            :snippet description
+                                                            :id playlistid
+                                                            :channeltitle channeltitle
+                                                            :channelid channelid)))
+
+                                      raw-results)))
+                              (when annotated-results
+                                (when callback
+                                  (funcall callback annotated-results)))
+                              annotated-results)))))
+#+end_src
+
+
+***** youtube channels
+#+begin_src emacs-lisp
+(cl-defun consult-web--youtube-fetch-channel-details (channelids &rest args &key callback query candidates &allow-other-keys)
+  "Fetches channel details for CHANNELIDS from “YouTube Data API” service.
+"
+  (pcase-let* ((params `(("part" . "snippet,statistics")
+                         ("key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key))
+                         ("id" . ,(string-join channelids ","))
+                         ))
+               (headers `(("Accept" . "application/json")
+                          ("Accept-Encoding" . "gzip")
+                          ("User-Agent" . "consult-web (gzip)")
+                          ("X-Goog-Api-Key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key)))))
+    (consult-web--fetch-url consult-web-youtube-channels-api-url consult-web-http-retrieve-backend
+                            :encoding 'utf-8
+                            :params params
+                            :headers headers
+                            :parser #'consult-web--json-parse-buffer
+                            :callback
+                            (lambda (attrs)
+                              (let* ((raw-results (gethash "items" attrs))
+                                     (annotated-results
+                                      (mapcar (lambda (item)
+                                                (let*
+                                                    ((source "YouTube")
+                                                     (channelid (gethash "id" item))
+                                                     (snippet (gethash "snippet" item))
+                                                     (statistics (gethash "statistics" item))
+                                                     (title (gethash "title" snippet))
+                                                     (customurl (gethash "customUrl" snippet))
+                                                     (date (gethash "publishedAt" snippet))
+                                                     (date (format-time-string "%Y-%m-%d" (date-to-time date)))
+                                                     (subcount (gethash "subscriberCount" statistics))
+                                                     (url (if customurl
+                                                              (concat consult-web-youtube-base-url customurl)
+                                                            (concat consult-web-youtube-channel-url channelid)))
+                                                     (search-url (consult-web--make-url-string consult-web-youtube-search-results-url `(("search_query" . ,query))))
+                                                     (description (gethash "description" snippet))
+                                                     (decorated (consult-web--youtube-format-candidate :source source :type "channel" :query query :title title :snippet description :channeltitle title :date date :subcount subcount)))
+                                                (propertize decorated
+                                                            :source source
+                                                            :title title
+                                                            :url url
+                                                            :search-url search-url
+                                                            :query query
+                                                            :snippet description
+                                                            :id channelid
+                                                            :channeltitle title
+                                                            :channelid channelid)))
+
+                                      raw-results)))
+                              (when annotated-results
+                                (when callback
+                                  (funcall callback annotated-results)))
+                              annotated-results)))))
+#+end_src
+
+#+RESULTS:
+: consult-web--youtube-fetch-channel-details
+
+
+***** youtube search with details
+#+begin_src emacs-lisp
+(cl-defun consult-web--youtube-fetch-results-details (input &rest args &key callback &allow-other-keys)
+  "Fetches search results for INPUT from “YouTube Data API” service.
+"
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+               (opts (car-safe opts))
+               (videos (make-vector 1 (list)))
+               (playlists (make-vector 1 (list)))
+               (count (plist-get opts :count))
+               (page (plist-get opts :page))
+               (def (plist-get opts :def))
+               (search-type (plist-get opts :type))
+               (vidtype (plist-get opts :vidtype))
+               (order (or (plist-get opts :order) (plist-get opts :sort)))
+               (count (or (and (integerp count) count)
+                    (and count (string-to-number (format "%s" count)))
+                    consult-web-default-count))
+         (page (or (and (integerp page) page)
+                   (and page (string-to-number (format "%s" page)))
+                   consult-web-default-count))
+               (def (if (and def (member (format "%s" def) '("any" "standard" "high"))) (format "%s" def)))
+               (vidtype (if (and vidtype (member (format "%s" vidtype) '("any" "episode" "movie"))) (format "%s" vidtype)))
+               (search-type (cond
+                             ((or def vidtype) "video")
+                             ((and search-type (member (format "%s" search-type) '("channel" "playlist" "video"))) (format "%s" search-type))))
+               (count (min count 100))
+               (page (+ (* page count) 1))
+               (order  (if (and order (member (format "%s" order) '("date" "rating" "relevance" "title" "videoCount" "viewCount"))) (format "%s" order) "relevance"))
+               (params (delq nil `(("q" . ,(replace-regexp-in-string " " "+" query))
+                         ("part" . "snippet")
+                         ("order" . ,order)
+                         ("maxResults" . ,(format "%s" count))
+                         ,(when search-type `("type" . ,(format "%s" search-type)))
+                         ,(when def `("videoDefinition" . ,def))
+                         ,(when vidtype `("videoType" . ,vidtype))
+                         ("key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key))
+                         )))
+               (headers `(("Accept" . "application/json")
+                          ("Accept-Encoding" . "gzip")
+                          ("User-Agent" . "consult-web (gzip)")
+                          ("X-Goog-Api-Key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key)))))
+    (consult-web--fetch-url consult-web-youtube-search-api-url consult-web-http-retrieve-backend
+                            :encoding 'utf-8
+                            :params params
+                            :headers headers
+                            :parser #'consult-web--json-parse-buffer
+                            :callback
+                            (lambda (attrs)
+                              (let* ((raw-results (gethash "items" attrs))
+                                     (videoids (list))
+                                     (playlistids (list))
+                                     (channelids (list)))
+                                (mapcar (lambda (item)
+                                          (let* ((kind (gethash "kind" (gethash "id" item)))
+                                                 (type (string-trim-left kind "youtube#")))
+                                            (pcase type
+                                              ("video"
+                                               (push (gethash "videoId" (gethash "id" item)) videoids))
+                                              ("playlist"
+                                               (push (gethash "playlistId" (gethash "id" item)) playlistids))
+                                              ("channel"
+                                               (push (gethash "channelId" (gethash "id" item)) channelids)))
+             )) raw-results)
+
+(when videoids
+  (consult-web--youtube-fetch-video-details videoids :callback callback :query query))
+
+(when playlistids
+  (consult-web--youtube-fetch-playlist-details playlistids :callback callback :query query))
+
+(when channelids
+  (consult-web--youtube-fetch-channel-details channelids :callback callback :query query))
+                                    )))))
+#+end_src
+
+#+RESULTS:
+: consult-web--youtube-fetch-results
+
+**** source
+#+begin_src emacs-lisp
 (consult-web-define-source "YouTube"
                            :narrow-char ?y
-                           :type 'async
+                           :type 'dynamic
                            :category 'consult-web-video
                            :face 'consult-web-engine-source-face
-                           :request #'consult-web--youtube-fetch-results
+                           :request consult-web-youtube-search-command
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
@@ -5746,7 +6939,6 @@ for details"
                            :dynamic 'both
                            :annotate nil
                            )
-
 #+end_src
 
 **** provide and footer
