@@ -22,7 +22,7 @@
   "Fetch search results for INPUT from Google Autosuggest.
 
 Uses `consult-web-google-autosuggest-api-url' as autosuggest api url."
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (page (plist-get opts :page))
@@ -80,7 +80,7 @@ Uses `consult-web-google-autosuggest-api-url' as autosuggest api url."
                            :group #'consult-web--group-function
                            :enabled (lambda () (boundp consult-web-google-autosuggest-api-url))
                            :sort t
-                           :dynamic t
+                           :static t
                            )
 
 ;;; provide `consult-web-google-autosuggest' module

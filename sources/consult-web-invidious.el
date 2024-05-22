@@ -20,9 +20,11 @@
 (defvar consult-web-invidious-server-url "https://api.invidious.io/instances.json")
 
 (cl-defun consult-web--invidious-format-candidate (&rest args &key source type query title snippet channeltitle date subcount videocount viewcount length face &allow-other-keys)
-"Formats a candidate for `consult-web-youtube' commands.
+"Formats a candidate for `consult-web-invidious' commands.
 
-SOURCE is the name to use (e.g. “YouTube”)
+SOURCE is the name to use (e.g. “Invidious”)
+
+TYPE is the type of candidate (e.g. video, channel, playlist)
 
 QUERY is the query input from the user
 
@@ -30,9 +32,17 @@ TITLE is the title of the video
 
 SNIPPET is a string containing a snippet/description of the video
 
+CHANNELTITLE is the name of the channel for the video
+
 DATE is the publish date of the video
 
-CHANNELTITLE is the name of the channel for the video
+SUBCOUNT is the subscriber count fpr a channel
+
+VIDEOCOUNT is the number of videos in a playlist
+
+VIEWCOUNT is the number of times a video is viewed
+
+LENGTH is the duration of a  video in seconds
 
 FACE is the face to apply to TITLE
 "
@@ -82,6 +92,8 @@ FACE is the face to apply to TITLE
     str))
 
 (defun consult-web--invidious-get-servers (&optional rotate)
+  "Get list of Invidious API servers.
+"
   (when (and consult-web-invidious-servers rotate)
     (setq consult-web-invidious-servers
           (nconc (cdr consult-web-invidious-servers)
@@ -106,8 +118,8 @@ FACE is the face to apply to TITLE
 ))))))
 
 (cl-defun consult-web--invidious-fetch-results (input &rest args &key callback &allow-other-keys)
-  "Fetches search results for INPUT from “Google custom search” service."
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  "Fetches search results for INPUT from “Invidious” service."
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (page (plist-get opts :page))
@@ -213,7 +225,7 @@ FACE is the face to apply to TITLE
                            :enabled (lambda () (bound-and-true-p consult-web-invidious-server-url))
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            :annotate nil
                            )
 

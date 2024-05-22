@@ -99,7 +99,7 @@ See URL `https://dev.elsevier.com/documentation/SCOPUSSearchAPI.wadl' for more i
 (cl-defun consult-web--scopus-fetch-results (input &rest args &key callback &allow-other-keys)
   "Retrieve search results from SCOPUS for INPUT.
 "
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (page (plist-get opts :page))
@@ -178,7 +178,7 @@ See URL `https://dev.elsevier.com/documentation/SCOPUSSearchAPI.wadl' for more i
                            :enabled (lambda () (bound-and-true-p consult-web-scopus-api-key))
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            :annotate nil
                            )
 

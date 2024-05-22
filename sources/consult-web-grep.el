@@ -17,6 +17,8 @@
 (require 'consult-web)
 
 (defun consult-web--grep-make-builder (make-builder &optional dir)
+  "General builders for grep and similar process.
+"
 (pcase-let* ((`(_ ,paths ,dir) (consult--directory-prompt "" dir))
              (paths (if dir
                         (mapcar (lambda (path) (file-truename (concat dir path))) paths)
@@ -26,6 +28,8 @@
 ))
 
 (defun consult-web--grep-transform (candidates &optional query)
+  "Formats consult-web-grep candidates.
+"
 (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
       (file "")
       (file-len 0)
@@ -73,14 +77,14 @@
   )
 
 (defun consult-web--grep-callback (cand)
-  "Grep preview function."
+  "Grep callback function."
 (funcall  (consult--jump-state) 'return (consult--grep-position (cdr (get-text-property 0 'multi-category cand))))
   )
 
 (cl-defun consult-web--grep-builder (input &rest args &key callback &allow-other-keys)
   "makes builder command line args for “grep”.
 "
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (dir (plist-get opts :dir))
@@ -108,7 +112,7 @@
                            :group #'consult-web--group-function
                            ;; :group #'consult--prefix-group
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            :transform #'consult-web--ripgrep-transform
                            :annotate nil
                            )

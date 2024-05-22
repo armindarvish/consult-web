@@ -13,9 +13,7 @@
 
 ;;; Code:
 
-(eval-when-compile
-  (require 'consult-web)
-)
+(require 'consult-web)
 
 (setq consult-web-sources--all-modules-list
       (list 'consult-web-bing
@@ -47,7 +45,7 @@
 
 (defun consult-web-sources--load-module (symbol)
 "Loads feature SYMBOL"
-(require symbol))
+(require symbol nil t))
 
 (defun consult-web-sources-load-modules (&optional list)
   "Loads the LIST of symbols.

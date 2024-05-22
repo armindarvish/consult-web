@@ -87,7 +87,7 @@ See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/i
 
 (cl-defun consult-web--chatgpt-fetch-results (input &rest args &key callback &allow-other-keys)
   "Fetches chat response for INPUT from chatGPT."
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (model (or (plist-get opts :model) "gpt-3.5-turbo"))
                (headers `(("Content-Type" . "application/json")
@@ -134,7 +134,7 @@ See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/i
                            :enabled (lambda () (bound-and-true-p consult-web-openai-api-key))
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            :annotate nil
                            )
 

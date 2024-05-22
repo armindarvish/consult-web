@@ -14,7 +14,7 @@
 
 ;;; Code:
 
-(require 'elfeed)
+(require 'elfeed nil t)
 (require 'consult-web)
 
 ;;; Customization Variables
@@ -95,7 +95,7 @@ uses INPUT as filter ro find entries in elfeed databse.
 if FILTER is non-nil, it is used as additional filter parameters.
 "
 (cl-letf* (((symbol-function #'elfeed-search-buffer) #'consult-web--elfeed-search-buffer))
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (maxcount (plist-get opts :count))
                (filter (and (plist-member opts :filter) (plist-get opts :filter)))
@@ -152,7 +152,7 @@ Uses `elfeed-show-entry'."
                            :enabled (lambda () (boundp 'elfeed-db))
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            :annotate nil
                            )
 

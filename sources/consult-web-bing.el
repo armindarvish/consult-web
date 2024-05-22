@@ -30,7 +30,7 @@ See URL `https://www.microsoft.com/en-us/bing/apis/bing-web-search-api' and URL 
 
 Refer to URL `https://programmablesearchengine.google.com/about/' and `https://developers.google.com/custom-search/' for more info.
 "
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (page (plist-get opts :page))
@@ -87,7 +87,7 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
                            :enabled (lambda () (bound-and-true-p consult-web-bing-search-api-key))
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            :annotate nil
                            )
 

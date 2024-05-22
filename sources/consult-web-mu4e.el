@@ -15,14 +15,11 @@
 ;;; Code:
 
 (require 'consult-web)
-(require 'consult-mu)
+(require 'consult-mu nil t)
 
 (defun consult-web-mu--format-candidate (cand highlight)
-  "Formats minibuffer candidates for `consult-mu'.
-
-CAND is the minibuffer completion candidate (a mu4e message collected by `consult-mu--dynamic-collection').
-
-if HIGHLIGHT is non-nil, it is highlighted with `consult-mu-highlight-match-face' in the minibuffer completion list."
+  "Formats candidates for `consult-web-mu4e'
+"
 
   (let* ((string (car cand))
          (info (cadr cand))
@@ -47,12 +44,12 @@ if HIGHLIGHT is non-nil, it is highlighted with `consult-mu-highlight-match-face
   (cons str (list :msg msg :query query :type :dynamic)))))
 
 (cl-defun consult-web--mu-fetch-results (input &rest args &key callback &allow-other-keys)
-  "makes builder command line args for “GitHub CLI”.
+  "makes builder command line args for “mu4e”.
 "
   (save-mark-and-excursion
   (consult-mu--execute-all-marks)
   )
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (count (or (and (integerp count) count)
@@ -74,7 +71,7 @@ if HIGHLIGHT is non-nil, it is highlighted with `consult-mu-highlight-match-face
       (funcall callback messages))))
 
 (defun consult-web--mu-preview (cand)
-  "Shows message from CAND in preview buffer"
+  "Preview for mu4e candidates"
   (when-let* ((info (text-properties-at 0 (cdr (get-text-property 0 'multi-category cand))))
               (msg (plist-get info :msg))
               (query (plist-get info :query))
@@ -83,7 +80,6 @@ if HIGHLIGHT is non-nil, it is highlighted with `consult-mu-highlight-match-face
               (match-str (car (consult--command-split query)))
               (mu4e-headers-buffer-name consult-mu-headers-buffer-name)
               (buffer consult-mu-view-buffer-name))
-    ;;(get-buffer-create consult-mu-view-buffer-name)
     (add-to-list 'consult-mu--view-buffers-list buffer)
     (funcall (consult--buffer-preview) 'preview
              (consult-mu--view msg t consult-mu-mark-previewed-as-read match-str)
@@ -94,7 +90,7 @@ if HIGHLIGHT is non-nil, it is highlighted with `consult-mu-highlight-match-face
   )
 
 (defun consult-web--mu-return (cand)
-  "Clean up and return CAND"
+  "return function for mu4e candidates"
 (save-mark-and-excursion
   (consult-mu--execute-all-marks)
   )
@@ -103,7 +99,7 @@ cand
 )
 
 (defun consult-web--mu-callback (cand)
-  "Get the msg back and run callback"
+  "Callback function for mu4e candidates"
   (let* ((info (text-properties-at 0 (cdr (get-text-property 0 'multi-category cand))))
          (msg (plist-get info :msg))
          (query (plist-get info :query))
@@ -129,7 +125,7 @@ cand
                            :selection-history 'consult-web--selection-history
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            :annotate nil
                            )
 

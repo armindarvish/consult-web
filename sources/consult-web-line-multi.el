@@ -26,7 +26,7 @@
   "Fetches search results for INPUT from `consult-line-multi'."
 (unless (functionp 'consult-web--line-multi-candidates)
   (error "consult-web: consult-web-line-multi not available. Make sure `consult' is loaded properly"))
-(pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+(pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (items (consult-web--line-multi-candidates query))
                (annotated-results (mapcar (lambda (item)
@@ -101,7 +101,7 @@ FACE is the face to apply to TITLE"
                            :enabled (lambda () (fboundp 'consult-web--line-multi-candidates))
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            :annotate nil
                            )
 

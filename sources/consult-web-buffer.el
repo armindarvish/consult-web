@@ -33,7 +33,7 @@
                                               :on-callback #'consult--buffer-action
                                               :search-history 'consult-web--search-history
                                               :selection-history 'consult-web--selection-history
-                                              :dynamic 'both
+                                              :static 'both
                                               :preview-key 'consult-web-preview-key
                                               :group #'consult-web--group-function
                                               )))

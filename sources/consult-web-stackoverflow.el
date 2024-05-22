@@ -73,7 +73,7 @@ See URL `https://api.stackexchange.com/', and URL `https://stackapps.com/' for m
   "Fetch search results for INPUT from StackOverflow.
 See URL `https://api.stackexchange.com/' for more info.
 "
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (page (plist-get opts :page))
@@ -141,11 +141,10 @@ See URL `https://api.stackexchange.com/' for more info.
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :dynamic 'both
                            :enabled (lambda () (bound-and-true-p consult-web-stackexchange-api-key))
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            :annotate nil
                            )
 

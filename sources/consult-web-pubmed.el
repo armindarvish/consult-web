@@ -32,12 +32,12 @@ See URL `https://www.ncbi.nlm.nih.gov/books/NBK25501/' for more info"
 (cl-defun consult-web--pubmed-esearch-fetch-results (input &rest args &key db &allow-other-keys)
   "Fetches “esearch” results for INPUT from PubMed Entrez Utilities service.
 
-DB is passed as db in query parameters. (This is the databes to search.)
+DB is passed as db in query parameters. (This is the database to search.)
 
 Refer to URL `https://www.ncbi.nlm.nih.gov/books/NBK25501/'
 for more info."
 
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (page (plist-get opts :page))
@@ -90,7 +90,7 @@ DB is passed as db in query parameters. (This is the databes to search.)
 Refer to URL `https://www.ncbi.nlm.nih.gov/books/NBK25501/'
 for more info."
 
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (page (plist-get opts :page))
@@ -233,7 +233,7 @@ FACE is the face to apply to TITLE
                            :enabled (lambda () (bound-and-true-p consult-web-pubmed-api-key))
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            :annotate nil
                            )
 

@@ -35,7 +35,7 @@ See URL `https://brave.com/search/api/' for more info"
 (cl-defun consult-web--brave-autosuggest-fetch-results (input &rest args &key callback &allow-other-keys)
   "Fetch search results for INPUT from Brave Autosuggest API.
 "
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (page (plist-get opts :page))
@@ -102,7 +102,7 @@ See URL `https://brave.com/search/api/' for more info"
                            :selection-history t
                            :enabled (lambda () (bound-and-true-p consult-web-brave-autosuggest-api-key))
                            :sort t
-                           :dynamic t
+                           :static t
                            )
 
 ;;; provide `consult-web-brave-autosuggest' module

@@ -86,7 +86,7 @@ for some limited documentation"
                            :enabled (lambda () (bound-and-true-p consult-web-duckduckgo-search-url))
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic t
+                           :static nil
                            :annotate nil
                            )
 

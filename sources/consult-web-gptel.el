@@ -14,7 +14,7 @@
 
 ;;; Code:
 
-(require 'gptel)
+(require 'gptel nil t)
 (require 'consult-web)
 
 ;;; Customization Variables
@@ -125,7 +125,7 @@ This makes a placeholder string “ask gptel: %s” %s=INPUT with
 metadata so it can be send to `gptel'."
   (unless (featurep 'gptel)
     (error "consult-web: gptel is not available. Make sure to install and load `gptel'."))
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (source "gptel")
                (backend (and (plist-member opts :backend) (format "%s" (plist-get opts :backend))))
@@ -164,7 +164,7 @@ metadata so it can be send to `gptel'."
                            :enabled (lambda () (fboundp 'gptel))
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            :annotate nil
                            )
 

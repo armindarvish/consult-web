@@ -31,6 +31,10 @@ https://www.wikipedia.org/search-redirect.php?search=query
 TITLE is the title of the candidate
 
 SNIPPET is a string containing a snippet/description of candidate
+
+DATE is the date the article was last updated
+
+FACE is the face to apply to TITLE
 "
   (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
          (source (and (stringp source) (propertize source 'face 'consult-web-source-face)))
@@ -61,7 +65,7 @@ SNIPPET is a string containing a snippet/description of candidate
   "Fetches search results from Wikipedia for INPUT.
 "
 
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (page (plist-get opts :page))
@@ -127,7 +131,7 @@ SNIPPET is a string containing a snippet/description of candidate
                            :group #'consult-web--group-function
                            :sort t
                            :type 'dynamic
-                           :dynamic 'both
+                           :static 'both
                             )
 
 ;;; provide `consult-web-wikipedia' module

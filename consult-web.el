@@ -16,13 +16,9 @@
 
 ;;; Requirements
 (eval-when-compile
-  (when (featurep 'json)
-    (require 'json))
-  (when (featurep 'request)
-    (require 'request))
-  (when (featurep 'plz)
-    (require 'plz))
-  )
+  (require 'json)
+  (require 'request nil t)
+  (require 'plz nil t))
 (require 'consult)
 (require 'url)
 (require 'url-queue)
@@ -49,13 +45,6 @@ each symbol being a source featue (e.g. consult-web-brave)"
 (defcustom consult-web-default-browse-function #'browse-url
   "consult-web default function when selecting a link"
   :type '(choice (function :tag "(Default) Browse URL" #'browse-url)
-                 (function :tag "Custom Function")))
-
-
-(defcustom consult-web-default-format-candidate #'consult-web--highlight-format-candidate
-  "consult-web default function when selecting a link"
-  :type '(choice (function :tag "(Default) Adds Metadata and Highlights Query" #'consult-web--highlight-format-candidate)
-                 (function :tag "Simple and Fast Foramting (No Metadata)" #'consult-web--simple-format-candidate)
                  (function :tag "Custom Function")))
 
 
@@ -87,6 +76,14 @@ This is similar to `consult-preview-key' but explicitly For consult-web."
                  (Key :tag "Key")
                  (repeat :tag "List Of Keys" Key)))
 
+
+(defcustom consult-web-default-format-candidate #'consult-web--highlight-format-candidate
+  "consult-web default function when selecting a link"
+  :type '(choice (function :tag "(Default) Adds Metadata and Highlights Query" #'consult-web--highlight-format-candidate)
+                 (function :tag "Simple and Fast Foramting (No Metadata)" #'consult-web--simple-format-candidate)
+                 (function :tag "Custom Function")))
+
+
 (defcustom consult-web-default-count 5
   "Number Of search results to retrieve."
   :type 'integer)
@@ -102,6 +99,10 @@ of the search results are omitted and the rest are shown."
 (defcustom consult-web-default-timeout 30
   "Default timeout in seconds for synchronous requests."
   :type 'integer)
+
+(defcustom consult-web-url-use-queue nil
+"Use `url-queue-retrieve'?"
+:type 'boolean)
 
 (defcustom consult-web-url-queue-parallel-processes 15
   "The number of concurrent url-retrieve processes."
@@ -139,6 +140,7 @@ By default it is set to :source. but can be any of:
   :url      group by URL
   :domain   group by the domain of the URL
   :source   group by source name
+  symbol    group by another property of the candidate
  "
   :type '(radio (const :tag "URL path" :url)
                 (const :tag "Domain of URL path":domain)
@@ -299,7 +301,6 @@ This is used in dynamic collection to change grouping.")
 (defvar consult-web-async-processes (list)
   "List of processes for async candidates colleciton")
 
-
 (defvar consult-web-dynamic-timers (list)
   "List of timers for dynamic candidates colleciton")
 
@@ -358,7 +359,7 @@ This is used in dynamic collection to change grouping.")
 
 (defface consult-web-keyword-face
   `((t :inherit 'font-lock-keyword-face))
-"The face for source annotation in minibuffer.")
+"The face for keyword annotation in minibuffer.")
 
 (defface consult-web-comment-face
   `((t :inherit 'font-lock-comment-face))
@@ -395,8 +396,8 @@ Ommits keys in IGNORE-KEYs."
 If the STRING is longer than WIDTH, it truncates the STRING
  and adds ellipsis, \"...\". if the STRING is shorter,
 it adds whitespace to the STRING.
-If TRUNCATE-POS is non-nil, it truncates from position pos in the STRING
-If ADD-POS is non-nil, it adds whitespace to the end of STRING.
+If TRUNCATE-POS is non-nil, it truncates from position TRUNCATE-POS in the STRING
+If ADD-POS is non-nil, it adds whitespace to psition ADD-POS in the STRING.
 "
   (let* ((string (format "%s" string))
          (w (length string)))
@@ -428,7 +429,7 @@ This can be used for aligning marginalia info in minibuffer."
     ))
 
 (defun consult-web--set-url-width (domain path width)
-"It shortes (or adds whitespace) to DOMAIN+PATH
+"It shortens (or adds whitespace) to DOMAIN+PATH
 to fit within WIDTH
 "
   (when (stringp domain)
@@ -505,8 +506,10 @@ if needed in formating candidates or preview buffers."
 SEPARATOR is a string placed between unmber and unit
 UNIT is a string used as unit
 BASE is the number base used to derive prefix
-PREFIXES is a list of chars for each magnitue
+PREFIXES is a list of chars for each magnitude
 (e.g. '(“” “K” “M” “G” ...) for none, kilo, mega, giga, ...
+
+adapted from `file-size-human-readable'.
 "
   (let* ((power (if (and base (numberp base)) (float base) 1000.0))
 	(prefixes (or prefixes '("" "k" "M" "G" "T" "P" "E" "Z" "Y" "R" "Q")))
@@ -594,11 +597,11 @@ Ommits keys in IGNORE-KEYS."
   "Handles errors for consult-web-url-retrieve functions."
   (message "consult-web: url-retrieve got an error: %s" (consult-web--parse-http-response)))
 
-(cl-defun consult-web-url-queue-retrieve (url &rest settings &key (sync 'nil) (type "GET") params headers data parser callback error timeout &allow-other-keys)
+(cl-defun consult-web-url-retrieve (url &rest settings &key (sync 'nil) (type "GET") params headers data parser callback error timeout &allow-other-keys)
   "Retrieves URL with settings.
 
 Passes all the arguments to
-`url-retrieve-queue' or `url-retrieve-snchronously'.
+`url-retrieve', `url-retrieve-queue' or `url-retrieve-snchronously'.
 
 if SYNC is non-nil, it retrieves URL sunchronously
 (see `url-retrieve-synchronously'.)
@@ -627,8 +630,8 @@ in the response buffer.
 TIMEOUT is the time in seconds for timing out synchronous requests.
 This is ignored in async requests.
 
-Note that this function uses `url-queue-retrieve', and
-sets url-queue-parallel-processes and url-queue-timeout to `consult-web-url-queue-parallel-processes',
+Note that  when `consult-web-url-use-queue' is set to t, this function uses `url-queue-retrieve' sets url-queue-parallel-processes and url-queue-timeout
+to `consult-web-url-queue-parallel-processes',
 and `consult-web-url-queue-timeout', respectively.
 "
   (let* ((url-request-method type)
@@ -638,6 +641,7 @@ and `consult-web-url-queue-timeout', respectively.
          (url-debug (if consult-web-log-level t nil))
          (url-queue-parallel-processes consult-web-url-queue-parallel-processes)
          (url-queue-timeout consult-web-url-queue-timeout)
+         (retriever (if consult-web-url-use-queue #'url-queue-retrieve #'url-retrieve))
          (response-data '(:status nil :data nil))
          (buffer (if sync
                      (if timeout
@@ -647,7 +651,7 @@ and `consult-web-url-queue-timeout', respectively.
                               nil)
                            (url-retrieve-synchronously url-with-params 'silent nil timeout))
                        (url-retrieve-synchronously url-with-params 'silent nil timeout))
-                   (url-queue-retrieve url-with-params
+                   (funcall retriever url-with-params
                                  (lambda (status &rest args)
                                    (let* ((parsed-data (condition-case nil
                                                      (if parser (funcall parser) (buffer-substring (point-min) (point-max)))
@@ -731,7 +735,7 @@ Refer to `plz' documentation for more details."
   "Retrieves URL with support for different BACKENDs.
 
 This is a wrapper that passes the args to corresponding
-BACKEND functions. (i.e. `consult-web-url-queue-retrieve',
+BACKEND functions. (i.e. `consult-web-url-retrieve',
  `request', `plz', ...) See backend functions for details.
 
 if SYNC is non-nil, it retrieves URL sunchronously.
@@ -747,12 +751,12 @@ DATA are http request data passed to data (e.g. `url-request-data').
 
 PARSER is a function that is executed in the url-retrieve
 response and the results are passed to CALLBACK.
-See `consult-web-url-queue-retrieve', `request', or `plz' for more info.
+See `consult-web-url-retrieve', `request', or `plz' for more info.
 
 CALLBACK is the function that is executed when the request is complete.
 It takes one argument, PARSED-DATA which is the output of the PARSER above.
 (i.e. it is called like (funcall CALLBACK (funcall PARSER)))
-See `consult-web-url-queue-retrieve', `request', or `plz' for more info.
+See `consult-web-url-retrieve', `request', or `plz' for more info.
 
 ERROR is a function that handles errors. It is called without any arguments
 in the response buffer.
@@ -781,7 +785,7 @@ This is ignored in async requests.
    ((eq backend 'url)
     (if sync
         (consult-web--url-response-body
-         (funcall #'consult-web-url-queue-retrieve url
+         (funcall #'consult-web-url-retrieve url
                   :sync sync
                   :type (or type "GET")
                   :params params
@@ -791,7 +795,7 @@ This is ignored in async requests.
                   :error (or error #'consult-web--url-retrieve-error-handler)
                   :callback (or callback #'identity)
                   :timeout (or timeout consult-web-default-timeout)))
-      (funcall #'consult-web-url-queue-retrieve url
+      (funcall #'consult-web-url-retrieve url
                :sync sync
                :type (or type "GET")
                :params params
@@ -982,17 +986,11 @@ This is passed as LOOKUP to `consult--read' on candidates and is used to format 
 
 (defun consult-web--default-url-preview (cand)
 "Default function to use for previewing CAND."
-(when-let* ((url (cond
-                  ((listp cand)
-                   (or (get-text-property 0 :url (car cand)) (car cand)))
-                  (t
-                   (or (get-text-property 0 :url cand) cand))))
+(when (listp cand) (setq cand (car-safe cand)))
+(when-let* ((url (get-text-property 0 :url cand))
             (buff (funcall consult-web-default-preview-function url)))
-               (funcall (consult--buffer-preview) 'preview
-                        buff
-                        )
-               )
-)
+(funcall (consult--buffer-preview) 'preview buff)
+))
 
 (cl-defun consult-web--make-state-function (&rest args &key setup preview exit return &allow-other-keys)
 "Convinient wrapper for `consult-web' to make custom state functions.
@@ -1025,22 +1023,27 @@ The preview and retrun actions are retrieve from `consult-web-sources-alist'."
     (lambda (action cand &rest args)
       (if cand
           (let* ((source (get-text-property 0 :source cand))
-                 (state (plist-get (cdr (assoc source consult-web-sources-alist)) :state))
-                 (preview (plist-get (cdr (assoc source consult-web-sources-alist)) :on-preview))
-                 (return (plist-get (cdr (assoc source consult-web-sources-alist)) :on-return)))
+                 (state (consult-web--get-source-prop source :state))
+                 (setup (consult-web--get-source-prop source :on-setup))
+                 (preview (consult-web--get-source-prop source :on-preview))
+                 (return (consult-web--get-source-prop source :on-return))
+                 (exit (consult-web--get-source-prop source :on-exit)))
             (if state
                 (funcall state action cand args)
               (pcase action
+                ('setup
+                 (if setup (funcall setup cand)))
+                ('preview
+                 (if preview (funcall preview cand) (consult-web--default-url-preview cand)))
+                ('return
+                 (if return (funcall return cand) cand))
                 ('exit
                  (unless consult-web-log-level
                    (consult-web--kill-hidden-buffers)
                    (consult-web--kill-url-dead-buffers)
                    )
-                 (funcall buffer-preview 'exit cand))
-                ('preview
-                 (if preview (funcall preview cand) (consult-web--default-url-preview cand)))
-                ('return
-                 (if return (funcall return cand) cand)))
+                 (funcall buffer-preview 'exit cand)
+                 (if exit (funcall exit cand))))
               ))))))
 
 (defun consult-web--default-callback (cand)
@@ -1049,8 +1052,9 @@ The preview and retrun actions are retrieve from `consult-web-sources-alist'."
 The CALLBACK is called when a CAND is selected.
 When making consult-web sources, if a CALLBACK is not provided, this
 CALLBACK is used as a fall back."
-  (if-let ((url (get-text-property 0 :url cand)))
-      (funcall consult-web-default-browse-function url)))
+(when (listp cand) (setq cand (car-safe cand)))
+(if-let ((url (get-text-property 0 :url cand)))
+    (funcall consult-web-default-browse-function url)))
 
 (defun consult-web--read-search-string (&optional initial)
 "Read a string from the minibuffer.
@@ -1073,12 +1077,9 @@ Excludes keys in IGNORE_OPTS.
 This i suseful for example to extract key value pairs
 from command-line options in alist of strings"
   (unless (member opt ignore-opts)
-    (let* ((key (cond
-                 ((string-match "--.*$" opt)
-                  (intern (concat ":" (replace-regexp-in-string "--" "" opt))))
-                 ((string-match ":.*$" opt)
-                  (intern opt))
-                 (t nil)))
+    (let* ((key (if (string-match ":.*$" opt)
+                  (intern opt)
+                 nil))
            (val (or (cadr (member opt opts)) "nil"))
            (val (if (stringp val)
                     (intern val))))
@@ -1097,10 +1098,9 @@ for grouping is provided in options.
                )
     (if (and opts (listp opts) (> (length opts) 0))
         (progn
-          (setq opts (cl-substitute ":count" "-n" opts :test 'equal))
-          (setq opts (cl-substitute ":page" "-p" opts :test 'equal))
-          (setq opts (cl-substitute ":group" "-g" opts :test 'equal))
-          (setq opts (cl-substitute ":group" "--group" opts :test 'equal))
+          (setq opts (cl-substitute ":count" ":n" opts :test 'equal))
+          (setq opts (cl-substitute ":page" ":p" opts :test 'equal))
+          (setq opts (cl-substitute ":group" ":g" opts :test 'equal))
           (if (member ":group" opts)
               (setq consult-web--override-group-by (cadr (member ":group" opts)))
           (setq consult-web--override-group-by nil))
@@ -1118,7 +1118,7 @@ for grouping is provided in options.
 
 Uses regexp to only keep candidates that match
 the current content of the minibuffer. This is useful
-in turning when using a sync source in an async/dynamic
+when using a sync source in an async/dynamic
 fashion as the input in the minibuffer is used to filter
 the candidates for the sync source
 "
@@ -1130,8 +1130,15 @@ the candidates for the sync source
         (string-match (concat ".*" (string-trim (car-safe (consult-web--split-command (minibuffer-contents-no-properties))) split-char "\n") ".*") (substring-no-properties cand))))))
 
 (defun consult-web--multi-static-sync-candidates (source idx input &rest args)
-  (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
+  "Synchronously collects and returns candidates of a “sync” SOURCE
+
+This returns the candidates with properties suitable
+for use in a static (not dynamically updated) multi-source command
+"
+  (let* ((name (plist-get source :name))
+         (face (and (plist-member source :face) `(face ,(plist-get source :face))))
          (cat (plist-get source :category))
+         (transform (consult-web--get-source-prop name :transform))
          (fun (plist-get source :items))
          (items))
     (when (functionp fun)
@@ -1140,13 +1147,22 @@ the candidates for the sync source
         (setq items (funcall fun)))
        (t
         (setq items (funcall fun input args)))))
- (and items (consult-web--multi-propertize items cat idx face))
+    (when (and items transform)
+      (setq items (funcall transform items action)))
+    (and items (consult-web--multi-propertize items cat idx face))
     ))
 
 (defun consult-web--multi-static-dynamic-candidates (source idx input &rest args)
-  (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
+  "Synchronously collects and returns candidates of a “dyanmic” SOURCE
+
+This returns the candidates with properties suitable
+for use in a static (not dynamically updated) multi-source command
+"
+  (let* ((name (plist-get source :name))
+         (face (and (plist-member source :face) `(face ,(plist-get source :face))))
          (cat (plist-get source :category))
          (name (plist-get source :name))
+         (transform (consult-web--get-source-prop name :transform))
          (fun (plist-get source :items))
          (items)
          (current))
@@ -1154,23 +1170,29 @@ the candidates for the sync source
       (funcall fun input
                :callback (lambda (response-items)
                            (if response-items
-                               (setq current
-                                     (and response-items (consult-web--multi-propertize
-                                                          response-items cat idx face)))
+                               (progn
+                                 (when transform (setq response-items (funcall transform response-items action)))
+                                 (setq current
+                                       (and response-items (consult-web--multi-propertize
+                                                            response-items cat idx face))))
                              (setq current t)))
                args)
-
       (let ((count 0)
-           (max consult-web-default-timeout)
-           (step 0.05))
-       (while (and (< count max) (not current))
-         (+ count step)
-         (if (>= count max)
-             (message "consult-web: Hmmm! %s took longer than expected." name)
-           (sit-for step))))
+            (max consult-web-default-timeout)
+            (step 0.05))
+        (while (and (< count max) (not current))
+          (+ count step)
+          (if (>= count max)
+              (message "consult-web: Hmmm! %s took longer than expected." name)
+            (sit-for step))))
       current)))
 
 (defun consult-web--multi-static-async-candidates (source idx input &rest args)
+"Synchronously collects and returns candidates of an “async” SOURCE
+
+This returns the candidates with properties suitable
+for use in a static (not dynamically updated) multi-source command
+"
   (let* ((name (plist-get source :name))
          (builder (plist-get source :items))
          (transform (consult-web--get-source-prop name :transform))
@@ -1203,7 +1225,7 @@ the candidates for the sync source
 ))))
 
 (defun consult-web--multi-candidates-static (sources &optional input &rest args)
-  "Return `consult--static' candidates from SOURCES."
+  "Return candidates from SOURCES for `consult-web--multi-static'."
   (let* ((candidates)
          (idx 0))
     (seq-doseq (src sources)
@@ -1249,7 +1271,17 @@ the candidates for the sync source
    (apply #'append candidates)))
 
 (defun consult-web--multi-static (sources input args &rest options)
-  ""
+  "Reads candidates from SOURCES with static interface
+
+This is similar to `consult--multi'
+but accepts async/dynamic sources as well.
+See `consult--multi' for more info.
+
+OPTIONS are similar to options in `consult--multi'.
+
+ARGS are sent as additional args to each source
+collection function.
+"
 (let* ((sources (consult--multi-enabled-sources sources))
          (candidates (consult--slow-operation "Give me a few seconds. The internet is a big mess!" (consult-web--multi-candidates-static sources input args)))
          (selected
@@ -1395,8 +1427,16 @@ POS and CATEGORY are the group ID and category for these items."
     ))
 
 (defun consult-web--multi-update-sync-candidates (async source idx action &rest args)
-  (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
+"Asynchronously collects and returns candidates of a “sync” SOURCE
+
+This returns the candidates with properties suitable
+for use in a dynamically updated multi-source command
+"
+
+  (let* ((name (plist-get source :name))
+         (face (and (plist-member source :face) `(face ,(plist-get source :face))))
          (cat (plist-get source :category))
+         (transform (consult-web--get-source-prop name :transform))
          (fun (plist-get source :items))
          (items))
     (when (functionp fun)
@@ -1405,22 +1445,36 @@ POS and CATEGORY are the group ID and category for these items."
         (setq items (funcall fun)))
        (t
         (setq items (funcall fun action args)))))
+    (when (and items transform)
+     (setq items (funcall transform items action)))
     (funcall async (and items (consult-web--multi-propertize items cat idx face)))
     (funcall async 'refresh)
 ))
 
 (defun consult-web--multi-update-dynamic-candidates (async source idx action &rest args)
-  (let* ((face (and (plist-member source :face) `(face ,(plist-get source :face))))
-         (cat (plist-get source :category)))
+"Asynchronously collects and returns candidates of a “dynamic” SOURCE
+
+This returns the candidates with properties suitable
+for use in a dynamically updated multi-source command
+"
+  (let* ((name (plist-get source :name))
+         (face (and (plist-member source :face) `(face ,(plist-get source :face))))
+         (cat (plist-get source :category))
+         (transform (consult-web--get-source-prop name :transform)))
     (funcall (plist-get source :items) action
              :callback (lambda (response-items)
                          (when response-items
+                           (when transform (setq response-items (funcall transform response-items action)))
                            (funcall async (consult-web--multi-propertize response-items cat idx face))
                            (funcall async 'refresh)
                            )) args)))
 
 (defun consult-web--multi-update-async-candidates (async source idx action &rest args)
-  ""
+  "Asynchronously collects and returns candidates of an “async” SOURCE
+
+This returns the candidates with properties suitable
+for use in a dynamically updated multi-source command
+"
   (let* ((name (plist-get source :name))
          (builder (plist-get source :items))
          (transform (consult-web--get-source-prop name :transform))
@@ -1500,6 +1554,7 @@ POS and CATEGORY are the group ID and category for these items."
     (when proc (add-to-list 'consult-web-async-processes `(,proc . ,proc-buf)))))
 
 (defun consult-web--multi-cancel ()
+"Kill asynchronous subprocess created for async multi-source commands."
   (mapcar (lambda (proc) (when proc (delete-process (car proc))
                                (kill-buffer (cdr proc))
                                ))
@@ -1512,8 +1567,11 @@ POS and CATEGORY are the group ID and category for these items."
   "Dynamically updates CANDIDATES for multiple SOURCES
 
 ASYNC is the sink function
-SOURCES are sources
-INPUT is the input string to pass to SOURCES
+
+SOURCES are sources to use
+
+ACTION is the action argument passed to ASYNC.
+See `consult--async-sink' for more info
 "
   (let ((idx 0))
     (seq-doseq (src sources)
@@ -1558,8 +1616,15 @@ INPUT is the input string to pass to SOURCES
 
 (defun consult-web--multi-dynamic-collection (async sources &rest args)
   "Dynamic computation of candidates.
-ASYNC is the sink
+
+ASYNC is the sink command
 SOURCES is list of sources to use
+
+This is a generalized replacement for `consult--async-process',
+and `consult--dynamic-collection' that allows collecting candidates from
+synchronous (e.g. elisp funciton with no input args),
+dynamic (e.g. elip function with input args),
+or asynchronous (e.g. shell process) SOURCES
 "
   (setq async (consult--async-indicator async))
   (let ((consult-web-async-processes (list))
@@ -1588,7 +1653,11 @@ SOURCES is list of sources to use
         (_ (funcall async action))))))
 
 (defun consult-web--multi-dynamic-command (sources &rest args)
-"Dynamic collection with input splitting on multiple SOURCES."
+"Dynamic collection with input splitting on multiple SOURCES.
+
+This is a generalized form of `consult--async-command'
+and `consult--dynamic-compute' that allow synchronous, dynamic
+, and asynchronous sources."
 (declare (indent 1))
 (thread-first
   (consult--async-sink)
@@ -1601,8 +1670,15 @@ SOURCES is list of sources to use
 "Select candidates with dynamic input from a list of SOURCES.
 
 This is similar to `consult--multi'
-but accepts async/dynamic sources as well.
+but with dynamic update of candidates
+and accepts async (shell commands simlar to `consult--grep')
+, or dynamic sources (slip functions like `consult-line-multi') as well.
+
+OPTIONS are similar to options in `consult--multi'.
 See `consult--multi' for more info.
+
+ARGS are sent as additional args to each source
+collection function.
 "
  (let* ((sources (consult-web--multi-enabled-sources sources))
          (selected
@@ -1647,9 +1723,11 @@ docstrings for variables."
           (capitalize source-name)))
 
 (defun consult-web--func-name (source-name &optional prefix suffix)
-  "Make a function symbol for interactive command for SOURCE-NAME.
+  "Make a function symbol witth SOURCE-NAME.
 
-Adds prefix and suffix if non-nil."
+This is used to make interactive command symbols.
+
+Adds PREFIX and SUFFIX if non-nil."
   (intern (concat "consult-web-" (if prefix prefix) (replace-regexp-in-string " " "-" (downcase source-name)) (if suffix suffix))))
 
 (defun consult-web--func-generate-docstring (source-name &optional dynamic)
@@ -1660,7 +1738,7 @@ This is used to make docstring for function made by `consult-web-define-source'.
                                                              (capitalize source-name))))
 
 (defun consult-web--make-source-list (source-name request annotate face narrow-char state preview-key category lookup group sort enabled predicate selection-history)
-  "Internal function to make a source for `consult--multi'.
+  "Internal function to make a source for `consult-web--multi'.
 
 Do not use this function directly, use `consult-web-define-source' macro
 instead."
@@ -1754,7 +1832,7 @@ Do not use this function directly, use `consult-web-define-source' macro
 
 ;;; Macros
 ;;;###autoload
-(cl-defmacro consult-web-define-source (source-name &rest args &key type request transform on-preview on-return state on-callback lookup dynamic group narrow-char category search-history selection-history face annotate preview-key docstring enabled sort predicate &allow-other-keys)
+(cl-defmacro consult-web-define-source (source-name &rest args &key type request transform on-setup on-preview on-return on-exit state on-callback lookup static group narrow-char category search-history selection-history face annotate preview-key docstring enabled sort predicate &allow-other-keys)
   "Macro to make a consult-web-source for SOURCE-NAME.
 
 \* Makes
@@ -1775,16 +1853,22 @@ TYPE        (sync|async)    Whether the source is synchronous or asynchronous
 
 REQUEST     (function)      Fetch results from source
 
+TRANSFORM   (funciton)      Function to trnaform/format candidates
+
+ON-SETUP    (function)      Setup action in `consult--read'
+
 ON-PREVIEW  (function)      Preview action in `consult--read'
 
 ON-RETURN   (function)      Return action in `consult--read'
+
+ON-EXIT     (function)      Exit action in `consult--read'
 
 STATE       (function)      STATE passed to `consult--read'
                             (bypasses ON-PREVIEW and ON-RETURN)
 
 ON-CALLBACK (function)      Function called on selected candidate
 
-DYNAMIC     (boolean|'both) Whether to make dynamic or non-dynamic commands
+STATIC      (boolean|'both) Whether to make static commands or not
 
 GROUP       (function)      Passed as GROUP to `consult--read'
 
@@ -1812,21 +1896,38 @@ DOCSTRING   (string)        DOCSTRING for the variable created for SOURCE-NAME
 
 Detailed Decription:
 
-TYPE can be either 'sync or 'async, depending on how the items for the source
-should be collected.'sync sources can readily get their candidates
-in a synchronous process (i.e. a function that returns a list). This can be dyanmic
-(meaning a funciton that takes an input argument) or static (i.e. a funciton without
- any arguments).
-'async sources need an async process to collectb their candidates
-(e.g. require loading a url asynchronously). In this case the list of candidates arrive
-at different times and the minibuffer candidates need to be updated in an interval.
+TYPE can be 'sync, 'dynamic or 'async, depending on how the items for
+the source should be collected.
+- 'sync sources get their candidates
+from a synchronous elisp function (i.e. a function that returns a list).
+- 'dynamic sources use an elisp function that runs asynchronousl to produce
+list of candidates (e.g. a web request that runs in the background)
+- 'async sources run a shell process (e.g. a command line command) asynchronously
+and return the results (lines from stdout) as list of candidates.
+
+Note that all three types can have dynamic completion
+(meaning that the funciton takes an input argument and returns
+the result base don the input), but the difference is whether the function
+uses synchronous or asynchronous collection and whether it is an elsip funciton
+or a shell subprocess.
+
 
 REQUEST is a function that returns the list of candidates.
-The recommended format is to use cl-defun and accept keyword arguments
-with this signature:
+- In synchronous sources, REQEUEST can take 0 or 1 input argument,
+and returns a list of candidates.
+- In asynchronous sources, REQUEST takes at least 1 input argument, and returns
+a list of strings that are command line process arguments.
+- In dynamic sources, REQUEST takes at least 1 input argument and a keyword
+argument called callback. The callback should be called with candidates as
+input in the body. Here is the recommended format;
+(cl-defun REQUEST (input &rest args &key callback &allow-other-keys)
+BODY
+(when callback (funcall callback candidates))
+candidates
+)
 
-For synchronous sources REQEUEST can take 0 (for static sources), or 1 input argument
-(for dynamic sources) and return a list of candidates.
+See `consult-web--brave-fetch-results' and `consult-web--grep-builder'
+for examples.
 
 For synchronous sources, REQUEST should take at least one input argument
 as well as a keyword argument called callback. The input argument is the string
@@ -1843,9 +1944,24 @@ Examples can be found in the wiki pages of the repo or in
 URL `https://github.com/armindarvish/consult-web/blob/main/consult-web-sources.el'
 
 
+TRANSFORM is a function that takes a list of candidates (e.g. strings)
+and optionally the query string and returns a list of transformed/formatted
+strings. It's called with `(funcall tranform candidates query)`.
+This is especially useful for async sources
+where the process returns a list of candiate strings, in which case TRANSFORM
+is applied to all candiates using `mapcar'.
+See `consult-web--grep-transform' for an example.
+
+
+ON-SETUP is a function called when setting up the minibuffer.
+This is used inside an state funciton by `consult--read.
+See and its `consult--read' and state functions for more info.
+
+
 ON-PREVIEW is used as a function to call on the candidate, when a preview is
 requested. It takes one required argument, the candidate. For an example,
 see `consult-web-default-preview-function'.
+
 
 ON-RETURN is used as a function to call on the candidate, when the
 candidate is selected. This is passed to consult built-in state
@@ -1853,10 +1969,15 @@ function machinery.
 Note that the output of this function will be returned in the consult-web
 commands. In consult-web, ON-CALLBACK is used to call further actions on
 this returned value. This allows to separate the return value from the
-commands and the action that i run on the selected candidates. Therefore
+commands and the action that run on the selected candidates. Therefore
 for most use cases, ON-RETURN can just be `#'identity' to get
 the candidate back as it is. But if some transformation is needed,
 ON-RETURN can be used to transform the selected candidate.
+
+
+ON-EXIT is a function called when exiting the minibuffer.
+This is used inside an state funciton by `consult--read.
+See `consult--read' and its state functions for more info.
 
 
 STATE is a function that takes no argument and returns a function for
@@ -1874,17 +1995,23 @@ Other examples can be found in the wiki pages of the repo or in
 “consult-web-sources.el” on the repository webpage or :
 URL `https://github.com/armindarvish/consult-web/blob/main/consult-web-sources.el'
 
-DYNAMIC can be a bollean (nil or t) or the symbol 'both.
+
+STATIC can be a boolean (nil or t) or the symbol 'both.
 If nil only \*non-dynamic\* interactive commands are created in this macro.
 if t only \*dynamic\* interactive commands are created in this macro.
 If something else (e.g. 'both) \*Both\* dynamic and non-dynamic commands
 are created.
 
-GROUP, ANNOTATE, NARROW-CHAR, CATEGORY, and PREVIEW-KEY are passed to
-`consult--read'. See consult's Documentaion for more
- details.
 
-FACE can be used to format the candidate.
+GROUP, ANNOTATE, NARROW-CHAR, CATEGORY, ENABLED, SORT,
+and PREVIEW-KEY are passed to `consult--read'.
+See consult's Documentaion for more details.
+
+
+FACE is used to format the candidate. This is useful for simple formating
+without making using TRANSFORM or formatin candidates inside the REQUEST
+funciton.
+
 
 DOCSTRING is used as docstring for the variable consult-web--source-%s
 variable that this macro creates for %s=SOURCE-NAME.
@@ -1897,7 +2024,7 @@ variable that this macro creates for %s=SOURCE-NAME.
      (defvar ,(consult-web--source-name source-name) nil)
      (setq ,(consult-web--source-name source-name) (consult-web--make-source-list ,source-name ,request ,annotate ,face ,narrow-char ,state ,preview-key ,category ,lookup ,group ,sort ,enabled ,predicate ,selection-history))
       ;; make a dynamic interactive command consult-web-dynamic-%s (%s=source-name)
-     (if ,dynamic
+     (unless (eq ,static t)
          (defun ,(consult-web--func-name source-name) (&optional initial no-callback &rest args)
            ,(or docstring (consult-web--func-generate-docstring source-name t))
            (interactive "P")
@@ -1905,7 +2032,7 @@ variable that this macro creates for %s=SOURCE-NAME.
            ))
 
      ;; make a static interactive command consult-web-%s (%s=source-name)
-     (unless (eq ,dynamic t)
+     (if ,static
        (defun ,(consult-web--func-name source-name nil "-static") (&optional input no-callback &rest args)
          ,(or docstring (consult-web--func-generate-docstring source-name))
          (interactive "P")
@@ -1920,8 +2047,10 @@ variable that this macro creates for %s=SOURCE-NAME.
                                                                 :face ,face
                                                                 :request-func ,request
                                                                 :transform ,transform
+                                                                :on-setup ,on-setup
                                                                 :on-preview (or ,on-preview #'consult-web--default-url-preview)
                                                                 :on-return (or ,on-return #'identity)
+                                                                :on-exit ,on-exit
                                                                 :on-callback (or ,on-callback #'consult-web--default-callback)
                                                                 :state ,state
                                                                 :group ,group
@@ -1931,8 +2060,8 @@ variable that this macro creates for %s=SOURCE-NAME.
                                                                 :category (or ',category 'consult-web)
                                                                 :search-history ,search-history
                                                                 :selection-history ,selection-history
-                                                                :interactive-static (and (functionp (consult-web--func-name ,source-name)) (consult-web--func-name ,source-name))
-                                                                :interactive-dynamic (and (functionp (consult-web--func-name ,source-name "dynamic-")) (consult-web--func-name ,source-name "dynamic-"))
+                                                                :interactive-static (and (functionp (consult-web--func-name ,source-name)) (consult-web--func-name ,source-name nil "-static"))
+                                                                :interactive-dynamic (and (functionp (consult-web--func-name ,source-name)) (consult-web--func-name ,source-name))
                                                                 :enabled ,enabled
                                                                 :sort ,sort
                                                                 :predicate ,predicate
@@ -1954,7 +2083,7 @@ DOCSTRING is the docstring for the function that is returned."
      ;; make a function that creates a consult--read source for consult-web-multi
      (cl-defun ,(consult-web--source-name source-name "-fetch-results") (input &rest args &key callback &allow-other-keys)
        ,(or docstring (consult-web--source-generate-docstring source-name))
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
          (opts (car-safe opts))
          (fun  (plist-get ',source :items))
          (results (cond
@@ -1973,10 +2102,10 @@ DOCSTRING is the docstring for the function that is returned."
                               :search-url nil
                               ))) results)))))))
 
-(cl-defun consult-web--make-source-from-consult-source (consult-source &rest args &key type request on-preview on-return state on-callback group narrow-char category dynamic search-history selection-history face annotate enabled sort predicate preview-key docstring &allow-other-keys)
+(cl-defun consult-web--make-source-from-consult-source (consult-source &rest args &key type request transform on-setup on-preview on-return on-exit state on-callback group narrow-char category static search-history selection-history face annotate enabled sort predicate preview-key docstring &allow-other-keys)
 "Makes a consult-web source from a consult source, CONSULT-SOURCE.
 
-All othe input variables are passed to `consult-web-define-source'
+All other input variables are passed to `consult-web-define-source'
 macro. See `consult-web-define-source' for more details"
   (if (boundp consult-source)
         (let* ((source (eval consult-source))
@@ -2000,21 +2129,24 @@ macro. See `consult-web-define-source' for more details"
            `(consult-web-define-source ,name
                                      :docstring ,docstring
                                      :narrow-char ,narrow-char
-                                     :type ',type
                                      :face ',face
                                      :category ',category
+                                     :type ',type
                                      :request (or ,request (consult-web--make-fetch-function ,source))
+                                     :transform ,transform
+                                     :on-setup ',on-setup
+                                     :on-preview ',on-preview
+                                     :on-return ',on-return
+                                     :on-exit ',on-exit
+                                     :on-callback ',on-callback
                                      :preview-key ,preview-key
                                      :search-history ',search-history
                                      :selection-history ',selection-history
-                                     :on-preview ',on-preview
-                                     :on-return ',on-return
-                                     :on-callback ',on-callback
                                      :enabled ',enabled
                                      :predicate ',predicate
                                      :group ',group
                                      :sort ',sort
-                                     :dynamic ',dynamic
+                                     :static ',static
                                      :annotate ',annotate
                                      ))))
     (display-warning :warning (format "Consult-web: %s is not available. Make sure `consult-notes' is loaded and set up properly" consult-source)))
@@ -2023,40 +2155,45 @@ macro. See `consult-web-define-source' for more details"
 (defun consult-web-multi (&optional initial sources no-callback &rest args)
   "Interactive “multi-source dynamic search”
 
-INITIAL is the initial search prompt in minibuffer.
+INITIAL is the initial search prompt in the minibuffer.
 Searches all sources in SOURCES. if SOURCES is nil
 `consult-web-dynamic-sources' is used.
 If NO-CALLBACK is t, only the selected candidate is returned without
 any callback action.
 
-This is an interactive command that fetches results form all the sources in `consult-web-dynamic-sources' with dynamic completion meaning that
-the search term can be dynamically updated by the user
-and the results are fetched as the user types in the miinibuffer.
+This is an interactive command that fetches results form
+all the sources in sources or `consult-web-dynamic-sources'
+with dynamic completion meaning that the search term can be dynamically
+updated by the user and the results are fetched as
+the user types in the miinibuffer.
 
 Additional commandline arguments can be passed in the minibuffer
 entry similar to `consult-grep' by typing `--` followed by arguments.
+These additional arguments are passed to async sources
+similar to `consult-grep' syntax. In addition, other arguments can be passed
+to all sources by using key, val pairs (.e.g “:group domain”)
 
 For example the user can enter:
 
-`#consult-web -- -g domain'
+`#consult-web -- :g domain'
 
-this will run a search on all the `consult-web-dynamic-sources' for
+This will run a search on all the sources for
 the term “consult-web” and then groups the results by the “domain
 of the URL” of the results.
 
 Built-in arguments include:
 
- -g, --groups, or :groups  for grouping (see `consult-web-group-by' and `consult-web--override-group-by'. for more info)
+ :g, or :group for grouping (see `consult-web-group-by' and `consult-web--override-group-by'. for more info)
 
- -n, --count, or :count is passed as the value for COUNT
+ :n, or :count is passed as the value for COUNT
 to any source in `consult-web-dynamic-sources'.
 
- -p, --page, or :page is passed as the value for PAGE to any source
+ :p, or :page is passed as the value for PAGE to any source
  in `consult-web-dynamic-sources'.
 
-Custom arguments can be passed by using “--ARG value” (or “:ARG value”).
+Custom arguments can be passed by using “:ARG value”.
 For example, if the user types the following in the minibuffer:
-“#how to do web search in emacs? -- --model gpt-4”
+“#how to do web search in emacs? -- :model gpt-4”
 The term “how to do web search in emacs?” is passed as the search
 term and the “gpt-4” as a keyword argument for :model to every
 source in `consult-web-dynamic-sources'. If any request function of

@@ -62,7 +62,7 @@ SNIPPET is a string containing a snippet/description of candidate
 (cl-defun consult-web--browser-history-fetch-results (input &rest args &key callback &allow-other-keys)
   "Fetch search results for INPUT from browser history.
 "
- (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+ (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (browser (or (plist-get opts :browser) browser-hist-default-browser))
                (browser-hist-default-browser browser)
@@ -90,7 +90,7 @@ SNIPPET is a string containing a snippet/description of candidate
                            :enabled (lambda () (fboundp 'browser-hist-search))
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            :annotate nil
                            )
 

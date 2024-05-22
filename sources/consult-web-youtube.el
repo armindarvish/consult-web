@@ -21,15 +21,25 @@
 
 SOURCE is the name to use (e.g. “YouTube”)
 
+TYPE is the type of candidate (e.g. video, channel, playlist)
+
 QUERY is the query input from the user
 
 TITLE is the title of the video
 
 SNIPPET is a string containing a snippet/description of the video
 
+CHANNELTITLE is the name of the channel for the video
+
 DATE is the publish date of the video
 
-CHANNELTITLE is the name of the channel for the video
+LENGTH is the duration of a  video in seconds
+
+SUBCOUNT is the subscriber count fpr a channel
+
+VIDEOCOUNT is the number of videos in a playlist
+
+VIEWCOUNT is the number of times a video is viewed
 
 FACE is the face to apply to TITLE
 "
@@ -106,8 +116,11 @@ for details"
 
 (cl-defun consult-web--youtube-fetch-results-simple (input &rest args &key callback &allow-other-keys)
   "Fetches search results for INPUT from “YouTube Data API” service.
+
+This is a simpler version that does not show details
+such as viw counts and duration, ... of videos/playlists, etc.
 "
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (page (plist-get opts :page))
@@ -183,7 +196,7 @@ for details"
                               annotated-results)))))
 
 (cl-defun consult-web--youtube-fetch-video-details (videoids &rest args &key callback query &allow-other-keys)
-  "Fetches search results for INPUT from “YouTube Data API” service.
+  "Fetches details with VIDEOIDS from “YouTube Data API” service.
 "
   (pcase-let* ((params `(("part" . "snippet,statistics,contentDetails")
                          ("key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key))
@@ -240,7 +253,8 @@ for details"
                               annotated-results)))))
 
 (cl-defun consult-web--youtube-fetch-playlist-details (playlistids &rest args &key callback query candidates &allow-other-keys)
-  "Fetches search results for INPUT from “YouTube Data API” service.
+  "Fetches details with PLAYLISTIDS from “YouTube Data API” service.
+
 "
   (pcase-let* ((params `(("part" . "snippet,contentDetails")
                          ("key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key))
@@ -293,7 +307,7 @@ for details"
                               annotated-results)))))
 
 (cl-defun consult-web--youtube-fetch-channel-details (channelids &rest args &key callback query candidates &allow-other-keys)
-  "Fetches channel details for CHANNELIDS from “YouTube Data API” service.
+  "Fetches  details with CHANNELIDS from “YouTube Data API” service.
 "
   (pcase-let* ((params `(("part" . "snippet,statistics")
                          ("key" . ,(consult-web-expand-variable-function consult-web-youtube-search-key))
@@ -348,8 +362,11 @@ for details"
 
 (cl-defun consult-web--youtube-fetch-results-details (input &rest args &key callback &allow-other-keys)
   "Fetches search results for INPUT from “YouTube Data API” service.
+
+This is a version with  statistics (e.g. view counts)
+ and more details on videos, playlsits, etc.
 "
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (videos (make-vector 1 (list)))
                (playlists (make-vector 1 (list)))
@@ -431,7 +448,7 @@ for details"
                            :enabled (lambda () (bound-and-true-p consult-web-youtube-search-key))
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            :annotate nil
                            )
 

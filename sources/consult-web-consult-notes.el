@@ -15,7 +15,7 @@
 ;;; Code:
 
 (require 'consult-web)
-(require 'consult-notes)
+(require 'consult-notes nil t)
 
 (defun consult-web--org-roam-note-preview (cand)
   "Preview function for org-roam files."
@@ -70,7 +70,7 @@
                                                 :selection-history 'consult-web--selection-history
                                                 :preview-key 'consult-preview-key
                                                 :group #'consult-web--group-function
-                                                :dynamic 'both
+                                                :static 'both
                                                 ))
 
 (when consult-notes-org-roam-mode
@@ -86,7 +86,7 @@
                                                             :on-callback #'consult-web--org-roam-note-callback
 
                                                             :preview-key 'consult-preview-key
-                                                            :dynamic 'both
+                                                            :static 'both
                                                             :group #'consult-web--group-function
                                                             :annotate nil
                                                             )))

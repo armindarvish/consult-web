@@ -15,12 +15,12 @@
 ;;; Code:
 
 (require 'consult-web)
-(require 'consult-gh)
+(require 'consult-gh nil t)
 
 (cl-defun consult-web--gh-search-repos-builder (input &rest args &key callback &allow-other-keys)
   "makes builder command line args for “GitHub CLI”.
 "
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (count (or (and (integerp count) count)
@@ -36,6 +36,7 @@
               hl))))
 
 (defun consult-web--gh-preview (cand)
+  "Preview for github repo candidates"
   (when-let ((info (text-properties-at 0 (cdr (get-text-property 0 'multi-category cand))))
              (repo (plist-get info :repo))
              (query (plist-get info :query))
@@ -58,6 +59,7 @@
     ))
 
 (defun consult-web--gh-callback (cand)
+  "Callback for github repo candidates."
   (funcall consult-gh-repo-action (cons cand (text-properties-at 0 (cdr (get-text-property 0 'multi-category cand))))))
 
 (consult-web-define-source "GitHub"
@@ -74,7 +76,7 @@
                            :selection-history 'consult-web--selection-history
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            :transform (lambda (items &optional query) (mapcar (lambda (string)
                                                                 (consult-gh--repo-format string (or query "") t)) items))
                            :annotate nil

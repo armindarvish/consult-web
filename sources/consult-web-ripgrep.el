@@ -20,7 +20,7 @@
 (cl-defun consult-web--ripgrep-builder (input &rest args &key callback &allow-other-keys)
   "makes builder command line args for “ripgrep”.
 "
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (dir (plist-get opts :dir))
@@ -34,6 +34,8 @@
             ))
 
 (defun consult-web--ripgrep-transform (candidates &optional query)
+  "Formats candidates of `consult-web-ripgrep'.
+"
 (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
       (file "")
       (file-len 0)
@@ -92,7 +94,7 @@
                            :group #'consult-web--group-function
                            ;; :group #'consult--prefix-group
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            :transform #'consult-web--ripgrep-transform
                            :annotate nil
                            )

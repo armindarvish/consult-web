@@ -79,7 +79,7 @@
                            :enabled (lambda () (bound-and-true-p consult-web-doiorg-search-url))
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            )
 
 ;;; provide `consult-web-doi' module

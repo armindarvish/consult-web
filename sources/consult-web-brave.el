@@ -32,7 +32,7 @@ See URL `https://brave.com/search/api/' for more info"
 (cl-defun consult-web--brave-fetch-results (input &rest args &key callback &allow-other-keys)
   "Retrieve search results from Brave for INPUT.
 "
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input))
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
                (count (plist-get opts :count))
                (page (plist-get opts :page))
@@ -90,7 +90,7 @@ See URL `https://brave.com/search/api/' for more info"
                            :enabled (lambda () (bound-and-true-p consult-web-brave-api-key))
                            :group #'consult-web--group-function
                            :sort t
-                           :dynamic 'both
+                           :static 'both
                            )
 
 ;;; provide `consult-web-brave' module
