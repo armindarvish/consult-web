@@ -5,8 +5,8 @@
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
-;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Version: 0.2
+;; Package-Requires: ((emacs "28.1") (consult "1.1") (consult-mu "1.0") (consult-web "0.2"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
 
@@ -15,7 +15,7 @@
 ;;; Code:
 
 (require 'consult-web)
-(require 'consult-mu nil t)
+(require 'consult-mu)
 
 (defun consult-web-mu--format-candidate (cand highlight)
   "Formats candidates for `consult-web-mu4e'

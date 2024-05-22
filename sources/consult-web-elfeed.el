@@ -5,8 +5,8 @@
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
-;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Version: 0.2
+;; Package-Requires: ((emacs "28.1") (consult "1.1") (consult-web "0.2") (elfeed "3.4.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web/blob/main/consult-web-sources
 ;; Keywords: convenience
 
@@ -14,7 +14,7 @@
 
 ;;; Code:
 
-(require 'elfeed nil t)
+(require 'elfeed)
 (require 'consult-web)
 
 ;;; Customization Variables

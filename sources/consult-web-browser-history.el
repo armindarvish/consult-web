@@ -5,8 +5,8 @@
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
-;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Version: 0.2
+;; Package-Requires: ((emacs "28.1") (consult "1.1") (consult-web "0.2") (browser-hist "0.0.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
 
@@ -15,7 +15,7 @@
 ;;; Code:
 
 (require 'consult-web)
-(require 'browser-hist nil t)
+(require 'browser-hist)
 
 (cl-defun consult-web--browser-history-format-candidate (&rest args &key source query url search-url title face &allow-other-keys)
   "Returns a highlighted formatted string for candidates.

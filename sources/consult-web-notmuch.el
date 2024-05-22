@@ -5,8 +5,8 @@
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
-;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Version: 0.2
+;; Package-Requires: ((emacs "28.1") (consult "1.1") (consult-web "0.2") (consult-notmuch "0.8.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
 
@@ -15,7 +15,7 @@
 ;;; Code:
 
 (require 'consult-web)
-(require 'consult-notmuch nil t)
+(require 'consult-notmuch)
 
 (cl-defun consult-web--notmuch-command-builder (input &rest args &key callback &allow-other-keys)
   "makes builder command line args for “notmuch”.

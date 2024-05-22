@@ -5,8 +5,8 @@
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
-;; Package-Requires: ((emacs "28.1") (consult "1.1"))
+;; Version: 0.2
+;; Package-Requires: ((emacs "28.1") (consult "1.1") (consult-web "0.2") (gptel "0.7.0"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
 
@@ -14,7 +14,7 @@
 
 ;;; Code:
 
-(require 'gptel nil t)
+(require 'gptel)
 (require 'consult-web)
 
 ;;; Customization Variables
