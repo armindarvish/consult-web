@@ -71,11 +71,15 @@
           (if (and file (file-exists-p (file-truename file))) (shell-quote-argument file))))
 
 (defun consult-web--apps-lauch-app (app &optional file)
-  ;; (start-process-shell-command "consult-web-apps" nil (consult-web--apps-cmd-args app file))
-  (make-process :name "consult-web-apps"
+  (let* ((name (concat "consult-web-" (file-name-base app)))
+         (app (if (listp app) app (list app)))
+         (file (if (listp file) file (list file)))
+         (cmds (remove nil (append (string-split consult-web-apps-open-command " ") app file)))
+         )
+  (make-process :name name
                 :connection-type 'pipe
-                :command (list consult-web-apps-open-command app)
-                ))
+                :command cmds
+                )))
 
 (defun consult-web--apps-preview (cand)
   "Mdfind preview function."

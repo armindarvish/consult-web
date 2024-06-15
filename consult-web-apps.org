@@ -2997,7 +2997,7 @@ If list is nil, loads `consult-web-sources-modules-to-load'and if that is nil as
                                                "/usr/share"
                                                "/usr/local/share"))))
      (setq consult-web-apps-regexp-pattern ".*\\.desktop$")
-     (setq consult-web-apps-open-command "")
+     (setq consult-web-apps-open-command "gtk-launch")
     )
 )
 #+end_src
@@ -3011,11 +3011,18 @@ If list is nil, loads `consult-web-sources-modules-to-load'and if that is nil as
           (if (and file (file-exists-p (file-truename file))) (shell-quote-argument file))))
 #+end_src
 
-**** open process
+**** make process
 #+begin_src emacs-lisp
 (defun consult-web--apps-lauch-app (app &optional file)
-  (start-process-shell-command "consult-web-apps" nil (consult-web--apps-cmd-args app file)
-                               ))
+  (let* ((name (concat "consult-web-" (file-name-base app)))
+         (app (if (listp app) app (list app)))
+         (file (if (listp file) file (list file)))
+         (cmds (remove nil (append (string-split consult-web-apps-open-command " ") app file)))
+         )
+  (make-process :name name
+                :connection-type 'pipe
+                :command cmds
+                )))
 #+end_src
 **** preview
 #+begin_src emacs-lisp
@@ -3028,14 +3035,15 @@ If list is nil, loads `consult-web-sources-modules-to-load'and if that is nil as
 #+begin_src emacs-lisp
 (defun consult-web--apps-callback (cand)
   "Mdfind callback function."
-  (let* ((app (get-text-property 0 :title cand)))
+  (let* ((path (get-text-property 0 :path cand))
+         (app (and (stringp path) (file-exists-p path) (file-name-nondirectory path) )))
     (funcall consult-web-apps-default-launch-function app)
   ))
 #+end_src
 
 **** format
 #+begin_src emacs-lisp
-(cl-defun consult-web--apps-format-candidates (&rest args &key source query title path face snippet &allow-other-keys)
+(cl-defun consult-web--apps-format-candidates (&rest args &key source query title path face snippet visible &allow-other-keys)
 "Formats the cnaiddates of `consult-web-apps.
 
 Files are entries from `consult-web--apps-list-apps'.
@@ -3053,6 +3061,7 @@ QUERY is the query input from the user"
          (title-str (propertize title 'face face))
          (title-str (consult-web--set-string-width title-str (* 4 frame-width-percent)))
          (str (concat title-str
+                      (unless visible "\s[Hidden App]")
                       (when snippet (concat "\t" snippet))
                       (when directory (concat "\t" directory))
                       ;; (when filename (concat "\t" (when directory directory) filename))
@@ -3068,162 +3077,7 @@ QUERY is the query input from the user"
 #+end_src
 
 **** items
-
-***** MacOS
-#+begin_src emacs-lisp
-(defun consult-web--apps-list-osx-apps ()
-  (let ((paths (if (stringp consult-web-apps-paths)
-                   (list consult-web-apps-paths)
-                 consult-web-apps-paths)))
-    (when (listp paths)
-      (apply #'append (mapcar (lambda (path)
-                          (directory-files path t consult-web-apps-regexp-pattern t)) paths)))))
-#+end_src
-***** Linux
-****** variables
-#+begin_src emacs-lisp
-(defvar consult-web--apps-linux-faulty-entries (list))
-#+end_src
-
-
-****** format
-#+begin_src emacs-lisp
-(defun consult-web-apps-linux-format-candidate (name comment _exec)
-  "Format Linux application names with the NAME (and COMMENT) only, but pretty."
-  (format "% -45s%s"
-          (propertize
-           (consult-web--set-string-width name 45)
-           'face 'consult-web-files-source-face)
-          (if comment
-              (concat ": " comment)
-            "")))
-#+end_src
-
-#+RESULTS:
-: consult-web-apps-format-linux-app
-
-****** desktop entries
-#+begin_src emacs-lisp
-(defun consult-web--apps-list-osx-apps ()
-  (let ((paths (if (stringp consult-web-apps-paths)
-                   (list consult-web-apps-paths)
-                 consult-web-apps-paths)))
-    (when (listp paths)
-      (apply #'append (mapcar (lambda (path)
-                          (directory-files path t consult-web-apps-regexp-pattern t)) paths)))))
-
-(defun consult-web--apps-linux-get-desktop-entries ()
-  "Return an alist of all Linux applications.
-Each list entry is a pair of (desktop-name . desktop-file).
-This function always returns its elements in a stable order.
-
-Taken from counsel.
-See URL `https://github.com/abo-abo/swiper'"
-  (let ((paths (if (stringp consult-web-apps-paths)
-                   (list consult-web-apps-paths)
-                 consult-web-apps-paths)))
-    (when (listp paths)
-      (cl-remove-duplicates (apply #'append (mapcar (lambda (path)
-                          (directory-files path t consult-web-apps-regexp-pattern t)) paths))))))
-
-    ;;     (hash (make-hash-table :test #'equal))
-    ;;     result)
-    ;; (dolist (dir paths)
-    ;;   (when (file-exists-p dir)
-    ;;     (let ((dir (file-name-as-directory dir)))
-    ;;       (dolist (file (directory-files-recursively dir ".*\\.desktop$"))
-    ;;         (let ((id (subst-char-in-string ?/ ?- (file-relative-name file dir))))
-    ;;           (print id)
-    ;;           (when (and (not (gethash id hash)) (file-readable-p file))
-    ;;     	(push (cons id file) result)
-    ;;     	(puthash id file hash)))))))
-    ;; result))
-#+end_src
-
-#+RESULTS:
-: consult-web--apps-list-linux-desktop-entries
-
-****** parse single desktop entry
-#+begin_src emacs-lisp
-(defun consult-web--apps-linux-parse-desktop-entry (file)
-  (with-temp-buffer
-    (insert-file-contents file)
-    (goto-char (point-min))
-    (let ((start (re-search-forward "^\\[Desktop Entry\\] *$" nil t))
-          (end (re-search-forward "^\\[" nil t))
-          (visible t)
-          name comment exec)
-      (catch 'break
-        (unless start
-          (push file counsel-linux-apps-faulty)
-          (message "Warning: File %s has no [Desktop Entry] group" file)
-          (throw 'break nil))
-
-        (goto-char start)
-        (when (re-search-forward "^\\(Hidden\\|NoDisplay\\) *= *\\(1\\|true\\) *$" end t)
-          (setq visible nil))
-        (setq name (match-string 1))
-
-        (goto-char start)
-        (unless (re-search-forward "^Type *= *Application *$" end t)
-          (throw 'break nil))
-        (setq name (match-string 1))
-
-        (goto-char start)
-        (unless (re-search-forward "^Name *= *\\(.+\\)$" end t)
-          (push file counsel-linux-apps-faulty)
-          (message "Warning: File %s has no Name" file)
-          (throw 'break nil))
-        (setq name (match-string 1))
-
-        (goto-char start)
-        (when (re-search-forward "^Comment *= *\\(.+\\)$" end t)
-          (setq comment (match-string 1)))
-
-        (goto-char start)
-        (unless (re-search-forward "^Exec *= *\\(.+\\)$" end t)
-          ;; Don't warn because this can technically be a valid desktop file.
-          (throw 'break nil))
-        (setq exec (match-string 1))
-
-        (goto-char start)
-        (when (re-search-forward "^TryExec *= *\\(.+\\)$" end t)
-          (let ((try-exec (match-string 1)))
-            (unless (locate-file try-exec exec-path nil #'file-executable-p)
-              (throw 'break nil))))
-        (propertize
-         (funcall counsel-linux-app-format-function name comment exec)
-         'visible visible)))))
-
-#+end_src
-
-#+RESULTS:
-: consult-web--apps-linux-parse-desktop-entry
-
-****** parse list of desktop entries
-#+begin_src emacs-lisp
-(defun cosult-web--apps-linux-parse-desktop-entries (entries)
-  "Parse the given alist of Linux desktop entries.
-Each entry in DESKTOP-ENTRIES-ALIST is a pair of ((id . file-name)).
-Any desktop entries that fail to parse are recorded in
-`counsel-linux-apps-faulty'."
-  (let (result)
-    (setq consult-web--apps-linux-faulty-entries nil)
-    (dolist (entry entries result)
-      (let* ((r (consult-web--apps-linux-parse-desktop-entry entry)))
-        (when r
-          (push r result))))))
-#+end_src
-
-****** get list of linux desktop apps
-#+begin_src emacs-lisp
-(defun consult-web--apps-linux-list-apps ()
-  (cosult-web--apps-linux-parse-desktop-entries (consult-web--apps-linux-get-desktop-entries)))
-#+end_src
-
-***** General
-
-****** get list of system apps
+***** get list of system apps
 #+begin_src emacs-lisp
 (defun consult-web--apps-get-desktop-apps ()
   "Return a list of files for system apps
@@ -3239,21 +3093,22 @@ in `consult-web-apps-paths'.
                           (directory-files path t consult-web-apps-regexp-pattern t)) paths))))))
 #+end_src
 
-****** parse app for name, comment and exec
+***** parse app for name, comment and exec
 #+begin_src emacs-lisp
 (defun consult-web--apps-parse-app-file (file)
-  (pacse system-type
+  (pcase system-type
          ('darwin
           (let ((name (file-name-base file))
                 (comment nil)
                 (exec (consult-web--apps-cmd-args (file-name-nondirectory file))))
-            (list name comment exec)))
+            (list name comment exec t)))
          ('gnu/linux
           (with-temp-buffer
             (insert-file-contents file)
             (goto-char (point-min))
             (let ((start (re-search-forward "^\\[Desktop Entry\\] *$" nil t))
                   (end (re-search-forward "^\\[" nil t))
+                  (visible t)
                   name comment exec)
               (catch 'break
                 (unless start
@@ -3290,11 +3145,11 @@ in `consult-web-apps-paths'.
                     (unless (locate-file try-exec exec-path nil #'file-executable-p)
                       (throw 'break nil))))
 
-                  (list name comment exec)))))))
+                  (list name comment exec visible)))))))
 #+end_src
 
 
-****** items
+***** items
 #+begin_src emacs-lisp
 
 (cl-defun consult-web--apps-list-apps (input &rest args &key callback &allow-other-keys)
@@ -3306,13 +3161,13 @@ in `consult-web-apps-paths'.
                (count (or (and (integerp count) count)
                              (and count (string-to-number (format "%s" count)))
                              consult-web-default-count))
-               (files consult-web--apps-get-desktop-apps))
+               (files (consult-web--apps-get-desktop-apps)))
    (mapcar (lambda (file)
              (pcase-let* ((source "Applications")
-                          (`(,name ,comment ,exec) (consult-web--apps-parse-app-file file))
+                          (`(,name ,comment ,exec ,visible) (consult-web--apps-parse-app-file file))
                     (title (or name (file-name-base file) ""))
                     (search-url nil)
-                    (decorated (funcall #'consult-web--apps-format-candidates :source source :query query :title title :path file :snippet comment)))
+                    (decorated (funcall #'consult-web--apps-format-candidates :source source :query query :title title :path file :snippet comment :visible visible)))
                (propertize decorated
                            :source source
                            :title title
