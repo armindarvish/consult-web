@@ -84,7 +84,7 @@
     (funcall consult-web-apps-default-launch-function app)
   ))
 
-(cl-defun consult-web--apps-format-candidates (&rest args &key source query title path face snippet &allow-other-keys)
+(cl-defun consult-web--apps-format-candidates (&rest args &key source query title path face snippet visible &allow-other-keys)
 "Formats the cnaiddates of `consult-web-apps.
 
 Files are entries from `consult-web--apps-list-apps'.
@@ -102,6 +102,7 @@ QUERY is the query input from the user"
          (title-str (propertize title 'face face))
          (title-str (consult-web--set-string-width title-str (* 4 frame-width-percent)))
          (str (concat title-str
+                      (unless visible "\s[Hidden App]")
                       (when snippet (concat "\t" snippet))
                       (when directory (concat "\t" directory))
                       ;; (when filename (concat "\t" (when directory directory) filename))
@@ -134,13 +135,14 @@ in `consult-web-apps-paths'.
           (let ((name (file-name-base file))
                 (comment nil)
                 (exec (consult-web--apps-cmd-args (file-name-nondirectory file))))
-            (list name comment exec)))
+            (list name comment exec t)))
          ('gnu/linux
           (with-temp-buffer
             (insert-file-contents file)
             (goto-char (point-min))
             (let ((start (re-search-forward "^\\[Desktop Entry\\] *$" nil t))
                   (end (re-search-forward "^\\[" nil t))
+                  (visible t)
                   name comment exec)
               (catch 'break
                 (unless start
@@ -177,7 +179,7 @@ in `consult-web-apps-paths'.
                     (unless (locate-file try-exec exec-path nil #'file-executable-p)
                       (throw 'break nil))))
 
-                  (list name comment exec)))))))
+                  (list name comment exec visible)))))))
 
 (cl-defun consult-web--apps-list-apps (input &rest args &key callback &allow-other-keys)
   "get a list of applications from OS.
@@ -191,10 +193,10 @@ in `consult-web-apps-paths'.
                (files (consult-web--apps-get-desktop-apps)))
    (mapcar (lambda (file)
              (pcase-let* ((source "Applications")
-                          (`(,name ,comment ,exec) (consult-web--apps-parse-app-file file))
+                          (`(,name ,comment ,exec ,visible) (consult-web--apps-parse-app-file file))
                     (title (or name (file-name-base file) ""))
                     (search-url nil)
-                    (decorated (funcall #'consult-web--apps-format-candidates :source source :query query :title title :path file :snippet comment)))
+                    (decorated (funcall #'consult-web--apps-format-candidates :source source :query query :title title :path file :snippet comment :visible visible)))
                (propertize decorated
                            :source source
                            :title title
