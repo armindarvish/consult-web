@@ -17,28 +17,62 @@
 (require 'consult-web)
 (require 'xdg)
 
-(defcustom consult-web-apps-paths (pcase system-type
-                                           ('darwin (list "/Applications" "/Applications/Utilities/" "/System/Applications/" "/System/Applications/Utilities/"))
-                                           ('gnu/linux
-                                            (mapcar (lambda (dir) (expand-file-name "applications" dir))
-	                                            (cons (xdg-data-home)
-                                                          (xdg-data-dirs))))
-                                           )
+(defcustom consult-web-apps-paths (list)
   "List of paths to directories containing applications.
 "
   :type '(repeat :tag "List of paths" directory))
 
-(defcustom consult-web-apps-open-command (pcase system-type
-                                           ('darwin "open -a")
-                                           ('gnu/linux ""))
+(defcustom consult-web-apps-open-command nil
   "Command line args to open an application"
   :type 'string)
-
 
 (defcustom consult-web-apps-default-launch-function #'consult-web--apps-lauch-app
   "consult-web default function to launch an app"
   :type '(choice (function :tag "(Default) Use System Shell" consult-web--apps-lauch-app)
                  (function :tag "Custom Function")))
+
+(defalias 'counsel--xdg-data-home
+  (if (fboundp 'xdg-data-home)
+      #'xdg-data-home
+    (lambda ()
+      (let ((directory (getenv "XDG_DATA_HOME")))
+        (if (or (null directory) (string= directory ""))
+            "~/.local/share"
+          directory))))
+  "Compatibility shim for `xdg-data-home'.")
+
+(defalias 'counsel--xdg-data-dirs
+  (if (fboundp 'xdg-data-dirs)
+      #'xdg-data-dirs
+    (lambda ()
+      (let ((path (getenv "XDG_DATA_DIRS")))
+        (if (or (null path) (string= path ""))
+            '("/usr/local/share" "/usr/share")
+          (parse-colon-path path)))))
+  "Compatibility shim for `xdg-data-dirs'.")
+
+
+(pcase system-type
+  ('darwin
+   (setq consult-web-apps-paths (list "/Applications" "/Applications/Utilities/" "/System/Applications/" "/System/Applications/Utilities/"))
+   (setq consult-web-apps-open-command "open -a"))
+   ('gnu/linux
+    (setq consult-web-apps-xdg-data-home (if (fboundp 'xdg-data-home) (xdg-data-home)
+                                           (let ((path (getenv "XDG_DATA_HOME")))
+                                             (if (or (null path) (string= path ""))
+                                                 '("/usr/local/share" "/usr/share")
+                                               (parse-colon-path path)))))
+     (setq consult-web-apps-xdg-data-dirs (if (fboundp 'xdg-data-dirs) (xdg-data-dirs)
+                                           (let ((path (getenv "XDG_DATA_DIRS")))
+                                             (if (or (null path) (string= path ""))
+                                                 '("/usr/local/share" "/usr/share")
+                                               (parse-colon-path path)))))
+     (setq consult-web-apps-paths (mapcar (lambda (dir) (expand-file-name "applications" dir))
+	                                 (list consult-web-apps-xdg-data-home
+                                               consult-web-apps-xdg-data-dirs)))
+     (setq consult-web-apps-open-command "")
+    )
+)
 
 (defvar consult-web-apps-pattern "*.app"
 "Regexp pattern to find OSX applications")
@@ -189,7 +223,7 @@ Each entry in DESKTOP-ENTRIES-ALIST is a pair of ((id . file-name)).
 Any desktop entries that fail to parse are recorded in
 `counsel-linux-apps-faulty'."
   (let (result)
-    ;; (setq counsel-linux-apps-faulty nil)
+    (setq consult-web--apps-linux-faulty-entries nil)
     (dolist (entry entries result)
       (let* ((id (car entry))
              (file (cdr entry))
@@ -198,7 +232,7 @@ Any desktop entries that fail to parse are recorded in
           (push (cons r id) result))))))
 
 (defun consult-web--apps-linux-list-apps ()
-cosult-web--apps-linux-parse-desktop-entries (consult-web--apps-linux--list-desktop-entries))
+  (cosult-web--apps-linux-parse-desktop-entries (consult-web--apps-linux-get-desktop-entries)))
 
 (cl-defun consult-web--apps-list-apps (input &rest args &key callback &allow-other-keys)
   "get a list of applications from OS.
