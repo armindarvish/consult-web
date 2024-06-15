@@ -72,10 +72,8 @@
 
 (defun consult-web--apps-lauch-app (app &optional file)
   (let* ((name (concat "consult-web-" (file-name-base app)))
-         (app (if (listp app) app (list app)))
-         (file (if (listp file) file (list file)))
-         (cmds (remove nil (append (string-split consult-web-apps-open-command " ") app file)))
-         )
+         (cmds (remove nil (string-split (consult-web--apps-cmd-args app file)))
+         ))
   (make-process :name name
                 :connection-type 'pipe
                 :command cmds
@@ -87,8 +85,7 @@
 
 (defun consult-web--apps-callback (cand)
   "Mdfind callback function."
-  (let* ((path (get-text-property 0 :path cand))
-         (app (and (stringp path) (file-exists-p path) (file-name-nondirectory path) )))
+  (let ((app (get-text-property 0 :app cand)))
     (funcall consult-web-apps-default-launch-function app)
   ))
 
@@ -203,6 +200,7 @@ in `consult-web-apps-paths'.
              (pcase-let* ((source "Applications")
                           (`(,name ,comment ,exec ,visible) (consult-web--apps-parse-app-file file))
                     (title (or name (file-name-base file) ""))
+                    (app (and (stringp file) (file-exists-p file ) (file-name-nondirectory file)))
                     (search-url nil)
                     (decorated (funcall #'consult-web--apps-format-candidates :source source :query query :title title :path file :snippet comment :visible visible)))
                (propertize decorated
@@ -213,7 +211,8 @@ in `consult-web-apps-paths'.
                            :query query
                            :snippet comment
                            :path file
-                           :exec exec)))
+                           :exec exec
+                           :app app)))
            (if query
                (seq-filter (lambda (file) (string-match (concat ".*" query ".*") file nil t)) files)
              files)
