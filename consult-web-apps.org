@@ -2963,59 +2963,43 @@ If list is nil, loads `consult-web-sources-modules-to-load'and if that is nil as
   "Command line args to open an application"
   :type 'string)
 
+(defcustom consult-web-apps-regexp-pattern ""
+"Regexp pattern to find system applications"
+:type 'regexp)
+
 (defcustom consult-web-apps-default-launch-function #'consult-web--apps-lauch-app
   "consult-web default function to launch an app"
   :type '(choice (function :tag "(Default) Use System Shell" consult-web--apps-lauch-app)
                  (function :tag "Custom Function")))
 
-(defalias 'counsel--xdg-data-home
-  (if (fboundp 'xdg-data-home)
-      #'xdg-data-home
-    (lambda ()
-      (let ((directory (getenv "XDG_DATA_HOME")))
-        (if (or (null directory) (string= directory ""))
-            "~/.local/share"
-          directory))))
-  "Compatibility shim for `xdg-data-home'.")
-
-(defalias 'counsel--xdg-data-dirs
-  (if (fboundp 'xdg-data-dirs)
-      #'xdg-data-dirs
-    (lambda ()
-      (let ((path (getenv "XDG_DATA_DIRS")))
-        (if (or (null path) (string= path ""))
-            '("/usr/local/share" "/usr/share")
-          (parse-colon-path path)))))
-  "Compatibility shim for `xdg-data-dirs'.")
-
-
 (pcase system-type
   ('darwin
    (setq consult-web-apps-paths (list "/Applications" "/Applications/Utilities/" "/System/Applications/" "/System/Applications/Utilities/"))
-   (setq consult-web-apps-open-command "open -a"))
+   (setq consult-web-apps-regexp-pattern ".*\\.app$")
+   (setq consult-web-apps-open-command "open -a")
+   )
    ('gnu/linux
     (setq consult-web-apps-xdg-data-home (if (fboundp 'xdg-data-home) (xdg-data-home)
                                            (let ((path (getenv "XDG_DATA_HOME")))
                                              (if (or (null path) (string= path ""))
-                                                 '("/usr/local/share" "/usr/share")
+                                                 nil
                                                (parse-colon-path path)))))
      (setq consult-web-apps-xdg-data-dirs (if (fboundp 'xdg-data-dirs) (xdg-data-dirs)
                                            (let ((path (getenv "XDG_DATA_DIRS")))
                                              (if (or (null path) (string= path ""))
-                                                 '("/usr/local/share" "/usr/share")
+    nil
                                                (parse-colon-path path)))))
-     (setq consult-web-apps-paths (mapcar (lambda (dir) (expand-file-name "applications" dir))
-	                                 (list consult-web-apps-xdg-data-home
-                                               consult-web-apps-xdg-data-dirs)))
+     (setq consult-web-apps-paths (remove nil (mapcar (lambda (dir)
+                                       (let ((path (and (stringp dir) (file-exists-p dir) (file-truename (expand-file-name "applications" dir)))))
+                                              (and (stringp path) path)))
+                                          (list consult-web-apps-xdg-data-home
+                                               consult-web-apps-xdg-data-dirs
+                                               "/usr/share"
+                                               "/usr/local/share"))))
+     (setq consult-web-apps-regexp-pattern ".*\\.desktop$")
      (setq consult-web-apps-open-command "")
     )
 )
-#+end_src
-
-**** other variables
-#+begin_src emacs-lisp
-(defvar consult-web-apps-pattern "*.app"
-"Regexp pattern to find OSX applications")
 #+end_src
 
 **** cmd args
@@ -3090,7 +3074,7 @@ QUERY is the query input from the user"
                  consult-web-apps-paths)))
     (when (listp paths)
       (apply #'append (mapcar (lambda (path)
-                          (file-expand-wildcards (concat path "/" consult-web-apps-pattern))) paths)))))
+                          (directory-files path t consult-web-apps-regexp-pattern t)) paths)))))
 #+end_src
 ***** Linux
 ****** variables
