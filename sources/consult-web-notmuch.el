@@ -64,6 +64,9 @@
                            :static 'both
                            :transform (lambda (items &optional query) (remove nil (mapcar (lambda (string)
                                                                 (consult-web-notmuch--transformer string query)) items)))
+                           :enabled (lambda () (if (and (executable-find "notmuch")
+                                                   (fboundp 'consult-notmuch))
+                                                   t nil))
                            :annotate nil
                            )
 

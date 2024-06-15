@@ -93,6 +93,9 @@
                            :selection-history 'consult-web--selection-history
                            :group #'consult-web--group-function
                            ;; :group #'consult--prefix-group
+                           :enabled (lambda () (if (and (executable-find "rg")
+                                                   (fboundp 'consult-ripgrep))
+                                                   t nil))
                            :sort t
                            :static 'both
                            :transform #'consult-web--ripgrep-transform

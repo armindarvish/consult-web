@@ -1243,7 +1243,7 @@ it also sets `consult-web--override-group-by' if and argument
 for grouping is provided in options.
 "
   (pcase-let* ((`(,query . ,opts) (consult--command-split input))
-               (args (or args (list)))
+               (args (if (equal args '(nil)) nil args))
                )
     (if (and opts (listp opts) (> (length opts) 0))
         (progn
@@ -1686,6 +1686,7 @@ for use in a dynamically updated multi-source command
   (let* ((name (plist-get source :name))
          (builder (plist-get source :items))
          (transform (consult-web--get-source-prop name :transform))
+         (filter (consult-web--get-source-prop name :filter))
          (props (seq-drop-while (lambda (x) (not (keywordp x))) args))
          (proc)
          (proc-buf)
@@ -1705,7 +1706,7 @@ for use in a dynamically updated multi-source command
         (let* ((rest "")
                (proc-filter
                 (lambda (_ out)
-                  (let ((lines (split-string out "[\r\n]+")))
+                  (let* ((lines (split-string out "[\r\n]+")))
                     (if (not (cdr lines))
                         (setq rest (concat rest (car lines)))
                       (setcar lines (concat rest (car lines)))
@@ -1716,7 +1717,8 @@ for use in a dynamically updated multi-source command
                         (setcdr last nil)
                         (when lines
                           (setq lines (mapcar (lambda (line) (propertize line :source name :title line :query query)) lines))
-                          (when transform (setq lines (funcall transform lines query)))
+                          (when (and filter (functionp filter)) (setq lines (funcall filter lines query)))
+                          (when (and transform (functionp transform)) (setq lines (funcall transform lines query)))
                           (funcall async (consult-web--multi-propertize lines cat idx face))
                           (funcall async 'refresh))
                         )))))
@@ -2089,7 +2091,7 @@ Do not use this function directly, use `consult-web-define-source' macro
 #+begin_src emacs-lisp
 ;;; Macros
 ;;;###autoload
-(cl-defmacro consult-web-define-source (source-name &rest args &key type request transform on-setup on-preview on-return on-exit state on-callback lookup static group narrow-char category search-history selection-history face annotate preview-key docstring enabled sort predicate &allow-other-keys)
+(cl-defmacro consult-web-define-source (source-name &rest args &key type request transform filter on-setup on-preview on-return on-exit state on-callback lookup static group narrow-char category search-history selection-history face annotate preview-key docstring enabled sort predicate &allow-other-keys)
   "Macro to make a consult-web-source for SOURCE-NAME.
 
 \* Makes
@@ -2110,7 +2112,9 @@ TYPE        (sync|async)    Whether the source is synchronous or asynchronous
 
 REQUEST     (function)      Fetch results from source
 
-TRANSFORM   (funciton)      Function to trnaform/format candidates
+TRANSFORM   (funciton)      Function to transform/format candidates
+
+FILTER      (funciton)      Function to filter candidates
 
 ON-SETUP    (function)      Setup action in `consult--read'
 
@@ -2209,6 +2213,15 @@ where the process returns a list of candiate strings, in which case TRANSFORM
 is applied to all candiates using `mapcar'.
 See `consult-web--grep-transform' for an example.
 
+FILTER is a function that takes a list of candidates (e.g. strings)
+and optionally the query string and returns a list of filtered
+strings. It's called with `(funcall filter candidates query)`.
+This is especially useful for async sources
+where the process returns a list of candiate strings, in which case FILTER
+is applied to all candidates using `seq-filter'.
+See `consult-web--locate-filter' for an example.
+
+
 
 ON-SETUP is a function called when setting up the minibuffer.
 This is used inside an state funciton by `consult--read.
@@ -2304,6 +2317,7 @@ variable that this macro creates for %s=SOURCE-NAME.
                                                                 :face ,face
                                                                 :request-func ,request
                                                                 :transform ,transform
+                                                                :filter ,filter
                                                                 :on-setup ,on-setup
                                                                 :on-preview (or ,on-preview #'consult-web--default-url-preview)
                                                                 :on-return (or ,on-return #'identity)
@@ -2856,7 +2870,8 @@ Gets the preview function from `consult-web-sources-alist'."
 **** define all source modules
 #+begin_src emacs-lisp
 (setq consult-web-sources--all-modules-list
-      (list 'consult-web-bing
+      (list 'consult-web-apps
+            'consult-web-bing
             'consult-web-brave-autosuggest
             'consult-web-brave
             'consult-web-browser-history
@@ -2866,6 +2881,7 @@ Gets the preview function from `consult-web-sources-alist'."
             'consult-web-doi
             'consult-web-duckduckgo
             'consult-web-elfeed
+            'consult-web-find
             'consult-web-gh
             'consult-web-google
             'consult-web-google-autosuggest
@@ -2874,6 +2890,8 @@ Gets the preview function from `consult-web-sources-alist'."
             'consult-web-gptel
             'consult-web-invidious
             'consult-web-line-multi
+            'consult-web-locate
+            'consult-web-mdfind
             'consult-web-mu4e
             'consult-web-notes
             'consult-web-notmuch
@@ -2908,13 +2926,13 @@ If list is nil, loads `consult-web-sources-modules-to-load'and if that is nil as
 ;;; consult-web-sources.el ends here
 #+end_src
 ** Single Source
-*** chatGPT
+*** Applications
 :PROPERTIES:
-:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-chatgpt.el
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-apps.el
 :END:
 **** header
 #+begin_src emacs-lisp
-;;; consult-web-chatgpt.el --- Consulting chatGPT -*- lexical-binding: t -*-
+;;; consult-web-apps.el --- Consulting OS applications -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2024 Armin Darvish
 
@@ -2933,31 +2951,87 @@ If list is nil, loads `consult-web-sources-modules-to-load'and if that is nil as
 (require 'consult-web)
 #+end_src
 
+**** custom variables
+#+begin_src emacs-lisp
+(defcustom consult-web-apps-paths (pcase system-type
+                                           ('darwin (list "/Applications" "/Applications/Utilities/" "/System/Applications/" "/System/Applications/Utilities/"))
+                                           ('gnu/linux
+                                            "/applications")
+                                           )
+  "List of paths to directories containing applications.
+"
+  :type '(repeat :tag "List of paths" string))
+
+(defcustom consult-web-apps-open-command (pcase system-type
+                                           ('darwin "open -a")
+                                           ('gnu/linux ""))
+  "Command line args to open an application"
+  :type 'string)
+
+
+(defcustom consult-web-apps-default-launch-function #'consult-web--apps-lauch-app
+  "consult-web default function to launch an app"
+  :type '(choice (function :tag "(Default) Use System Shell" consult-web--apps-lauch-app)
+                 (function :tag "Custom Function")))
+
+#+end_src
+
+**** other variables
+#+begin_src emacs-lisp
+(defvar consult-web-apps-pattern "*.app"
+"Regexp pattern to find OSX applications")
+#+end_src
+
+**** cmd args
+#+begin_src emacs-lisp
+(defun consult-web--apps-cmd-args (app &optional file)
+  (concat consult-web-apps-open-command
+          " "
+          (shell-quote-argument app)
+          (if (and file (file-exists-p (file-truename file))) (shell-quote-argument file))))
+#+end_src
+
+**** open process
+#+begin_src emacs-lisp
+(defun consult-web--apps-lauch-app (app &optional file)
+  (print  (consult-web--apps-cmd-args app file))
+  (start-process-shell-command "consult-web-apps" nil (consult-web--apps-cmd-args app file)
+                               ))
+#+end_src
+**** preview
+#+begin_src emacs-lisp
+(defun consult-web--apps-preview (cand)
+  "Mdfind preview function."
+(funcall (consult--file-preview) 'preview cand))
+#+end_src
+
+**** callback
+#+begin_src emacs-lisp
+(defun consult-web--apps-callback (cand)
+  "Mdfind callback function."
+  (let* ((app (get-text-property 0 :title cand)))
+    (funcall consult-web-apps-default-launch-function app)
+  ))
+#+end_src
+
 **** format
 #+begin_src emacs-lisp
-(defun consult-web-dynamic--chatgpt-format-candidate (source query title &optional model face)
-  "Returns a formatted string for candidates of `consult-web-chatgpt'.
+(cl-defun consult-web--apps-format-candidates (&rest args &key source query title path face &allow-other-keys)
+"Formats the cnaiddates of `consult-web-apps.
 
-SOURCE is the name to use (e.g. “chatgPT”)
-
-QUERY is the query input from the user
-
-TITLE is the title of the candidate (e.g. response from chatgpt)
-
-MODEL is the model used
-
-FACE is the face to apply to TITLE
-"
-  (let* ((source (if (stringp source) (propertize source 'face 'consult-web-source-face)))
-         (title-str (consult-web--set-string-width title (floor (* (frame-width) 0.4))))
-         (title-str (propertize title-str 'face (or face 'consult-web-ai-source-face)))
-         (str (concat title-str "\t"
-                      (propertize " " 'display '(space :align-to center))
-                      (if model (propertize (format "model: %s" model) 'face 'consult-web-path-face))
-                      (if source (concat "\t" source))))
-         (match-str (if (stringp query) (consult--split-escaped query) nil))
-         )
-    (if consult-web-highlight-matches
+Files are entries from `consult-web--apps-list-apps'.
+QUERY is the query input from the user"
+  (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
+         (source (and (stringp source) (propertize source 'face 'consult-web-source-face)))
+         (path  (and (stringp path) (propertize path 'face 'consult-web-path-face)))
+         (match-str (and (stringp query) (consult--split-escaped query) nil))
+         (face (or (consult-web--get-source-prop source :face) face 'consult-web-files-source-face))
+         (title-str (propertize title 'face face))
+         (title-str (consult-web--set-string-width title-str (* 4 frame-width-percent)))
+         (str (concat title-str
+                      (when source (concat "\t" source))
+                      (when path (concat "\t" path)))))
+     (if consult-web-highlight-matches
         (cond
          ((listp match-str)
           (mapcar (lambda (match) (setq str (consult-web--highlight-match match str t))) match-str))
@@ -2965,115 +3039,66 @@ FACE is the face to apply to TITLE
           (setq str (consult-web--highlight-match match-str str t)))))
     str))
 #+end_src
-
-**** preview
+**** main
 #+begin_src emacs-lisp
-(defun consult-web--chatgpt-response-preview (response &optional query)
-  "Returns a buffer with formatted RESPONSE from chatGPT"
-  (save-excursion
-    (let ((buff (get-buffer-create "*consult-web-chatgpt-response*")))
-      (with-current-buffer buff
-        (erase-buffer)
-        (if query (insert (format "# User:\n\n %s\n\n" query)))
-        (if response (insert (format "# chatGPT:\n\n %s\n\n" response)))
-        (if (featurep 'mardown-mode)
-            (require 'markdown-mode)
-          (markdown-mode)
-          )
-        (point-marker))
-      )))
-
-
-(defun consult-web--chatgpt-preview (cand)
-  "Shows a preview buffer with chatGPT response from CAND"
-  (when-let ((buff (get-buffer "*consult-web-chatgpt-response*")))
-    (kill-buffer buff))
-
-  (if (listp cand) (setq cand (or (car-safe cand) cand)))
-  (when-let*  ((query  (get-text-property 0 :query cand))
-               (response (or (get-text-property 0 :title cand) cand))
-               (marker (consult-web--chatgpt-response-preview response query)))
-    (consult--jump marker)
-))
-#+end_src
-**** chatgpt with http-request
-#+begin_src emacs-lisp
-(defvar consult-web-chatgpt-api-url "https://api.openai.com/v1/chat/completions")
-
-(defcustom consult-web-openai-api-key nil
-"Key for OpeAI API
-
-See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/introduction' for details"
-:group 'consult-web
-:type '(choice (const :tag "API Key" string)
-               (function :tag "Custom Function")))
-
-
-(cl-defun consult-web--chatgpt-fetch-results (input &rest args &key callback &allow-other-keys)
-  "Fetches chat response for INPUT from chatGPT."
-  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
+(cl-defun consult-web--apps-list-apps (input &rest args &key callback &allow-other-keys)
+  "get a list of applications from OS.
+"
+ (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
                (opts (car-safe opts))
-               (model (or (plist-get opts :model) "gpt-3.5-turbo"))
-               (headers `(("Content-Type" . "application/json")
-                    ("Authorization" . ,(concat "Bearer " (consult-web-expand-variable-function consult-web-openai-api-key))))))
-    (consult-web--fetch-url consult-web-chatgpt-api-url
-                            consult-web-http-retrieve-backend
-      :type "POST"
-      :encoding 'utf-8
-      :headers headers
-      :data  (json-encode `((model . ,model)
-                    (messages . [((role . "user")
-                                  (content . ,query))])))
-      :parser #'consult-web--json-parse-buffer
-      :callback
-      (lambda (attrs)
-        (let* ((source "chatGPT")
-                    (url nil)
+               (count (plist-get opts :count))
+               (count (or (and (integerp count) count)
+                             (and count (string-to-number (format "%s" count)))
+                             consult-web-default-count))
+               (paths (if (stringp consult-web-apps-paths)
+                   (list consult-web-apps-paths)
+                 consult-web-apps-paths))
+               (files (apply #'append (mapcar (lambda (path)
+                                                (file-expand-wildcards (concat path "/" consult-web-apps-pattern))) paths))))
+   (mapcar (lambda (file)
+             (let* ((source "Applications")
+                    (title (file-name-base file))
                     (search-url nil)
-                    (choices (car-safe (gethash "choices" attrs)))
-                    (title (and choices (map-nested-elt choices '("message" "content"))))
-                    (model model)
-                    (decorated (consult-web-dynamic--chatgpt-format-candidate source query title model))
-                    (annotated-results (and decorated (propertize decorated
-                                             :source source
-                                             :title title
-                                             :url url
-                                             :search-url search-url
-                                             :query query))))
-          (when annotated-results
-          (funcall callback (list annotated-results)))
-          annotated-results)))))
+                    (decorated (funcall #'consult-web--apps-format-candidates :source source :query query :title title :path file)))
+               (propertize decorated
+                           :source source
+                           :title title
+                           :url nil
+                           :search-url nil
+                           :query query
+                           :snippet nil
+                           :path file)))
+           (seq-filter (lambda (file) (string-match (concat ".*" query ".*") file nil t)) files)
+   )
+ ))
 
-(consult-web-define-source "chatGPT"
-                           :narrow-char ?G
-                           :type 'dynamic
-                           :face 'consult-web-ai-source-face
-                           :request #'consult-web--chatgpt-fetch-results
-                           :preview-key consult-web-preview-key
-                           :on-preview #'consult-web--chatgpt-preview
+(consult-web-define-source "Applications"
+                           :narrow-char ?a
+                           :type 'sync
+                           :request #'consult-web--apps-list-apps
+                           :on-preview #'ignore
                            :on-return #'identity
-                           :on-callback #'consult-web--chatgpt-preview
+                           :on-callback #'consult-web--apps-callback
+                           :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
-                           :enabled (lambda () (bound-and-true-p consult-web-openai-api-key))
+                           :enabled (lambda () (boundp 'consult-web-apps-paths))
                            :group #'consult-web--group-function
                            :sort t
                            :static 'both
                            :annotate nil
+                           :category 'file
                            )
-
-
 #+end_src
 **** provide and footer
 #+begin_src emacs-lisp
-;;; provide `consult-web-chatgpt' module
+;;; provide `consult-web-apps module
 
-(provide 'consult-web-chatgpt)
+(provide 'consult-web-apps)
 
-(add-to-list 'consult-web-sources-modules-to-load 'consult-web-chatgpt)
-;;; consult-web-chatgpt.el ends here
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-apss)
+;;; consult-web-apps.el ends here
 #+end_src
-
 
 *** Bing
 :PROPERTIES:
@@ -3191,7 +3216,7 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
 :PROPERTIES:
 :header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-brave.el
 :END:
-**** heuireader
+**** header
 #+begin_src emacs-lisp
 ;;; consult-web-brave.el --- Consulting Brave -*- lexical-binding: t -*-
 
@@ -3545,6 +3570,173 @@ SNIPPET is a string containing a snippet/description of candidate
 (add-to-list 'consult-web-sources-modules-to-load 'consult-web-browser-history)
 ;;; consult-web-browser-history.el ends here
 #+end_src
+*** chatGPT
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-chatgpt.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-chatgpt.el --- Consulting chatGPT -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.2
+;; Package-Requires: ((emacs "28.1") (consult "1.1") (consult-web "0.2"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+#+end_src
+
+**** format
+#+begin_src emacs-lisp
+(defun consult-web-dynamic--chatgpt-format-candidate (source query title &optional model face)
+  "Returns a formatted string for candidates of `consult-web-chatgpt'.
+
+SOURCE is the name to use (e.g. “chatgPT”)
+
+QUERY is the query input from the user
+
+TITLE is the title of the candidate (e.g. response from chatgpt)
+
+MODEL is the model used
+
+FACE is the face to apply to TITLE
+"
+  (let* ((source (if (stringp source) (propertize source 'face 'consult-web-source-face)))
+         (title-str (consult-web--set-string-width title (floor (* (frame-width) 0.4))))
+         (title-str (propertize title-str 'face (or face 'consult-web-ai-source-face)))
+         (str (concat title-str "\t"
+                      (propertize " " 'display '(space :align-to center))
+                      (if model (propertize (format "model: %s" model) 'face 'consult-web-path-face))
+                      (if source (concat "\t" source))))
+         (match-str (if (stringp query) (consult--split-escaped query) nil))
+         )
+    (if consult-web-highlight-matches
+        (cond
+         ((listp match-str)
+          (mapcar (lambda (match) (setq str (consult-web--highlight-match match str t))) match-str))
+         ((stringp match-str)
+          (setq str (consult-web--highlight-match match-str str t)))))
+    str))
+#+end_src
+
+**** preview
+#+begin_src emacs-lisp
+(defun consult-web--chatgpt-response-preview (response &optional query)
+  "Returns a buffer with formatted RESPONSE from chatGPT"
+  (save-excursion
+    (let ((buff (get-buffer-create "*consult-web-chatgpt-response*")))
+      (with-current-buffer buff
+        (erase-buffer)
+        (if query (insert (format "# User:\n\n %s\n\n" query)))
+        (if response (insert (format "# chatGPT:\n\n %s\n\n" response)))
+        (if (featurep 'mardown-mode)
+            (require 'markdown-mode)
+          (markdown-mode)
+          )
+        (point-marker))
+      )))
+
+
+(defun consult-web--chatgpt-preview (cand)
+  "Shows a preview buffer with chatGPT response from CAND"
+  (when-let ((buff (get-buffer "*consult-web-chatgpt-response*")))
+    (kill-buffer buff))
+
+  (if (listp cand) (setq cand (or (car-safe cand) cand)))
+  (when-let*  ((query  (get-text-property 0 :query cand))
+               (response (or (get-text-property 0 :title cand) cand))
+               (marker (consult-web--chatgpt-response-preview response query)))
+    (consult--jump marker)
+))
+#+end_src
+**** chatgpt with http-request
+#+begin_src emacs-lisp
+(defvar consult-web-chatgpt-api-url "https://api.openai.com/v1/chat/completions")
+
+(defcustom consult-web-openai-api-key nil
+"Key for OpeAI API
+
+See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/introduction' for details"
+:group 'consult-web
+:type '(choice (const :tag "API Key" string)
+               (function :tag "Custom Function")))
+
+
+(cl-defun consult-web--chatgpt-fetch-results (input &rest args &key callback &allow-other-keys)
+  "Fetches chat response for INPUT from chatGPT."
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
+               (opts (car-safe opts))
+               (model (or (plist-get opts :model) "gpt-3.5-turbo"))
+               (headers `(("Content-Type" . "application/json")
+                    ("Authorization" . ,(concat "Bearer " (consult-web-expand-variable-function consult-web-openai-api-key))))))
+    (consult-web--fetch-url consult-web-chatgpt-api-url
+                            consult-web-http-retrieve-backend
+      :type "POST"
+      :encoding 'utf-8
+      :headers headers
+      :data  (json-encode `((model . ,model)
+                    (messages . [((role . "user")
+                                  (content . ,query))])))
+      :parser #'consult-web--json-parse-buffer
+      :callback
+      (lambda (attrs)
+        (let* ((source "chatGPT")
+                    (url nil)
+                    (search-url nil)
+                    (choices (car-safe (gethash "choices" attrs)))
+                    (title (and choices (map-nested-elt choices '("message" "content"))))
+                    (model model)
+                    (decorated (consult-web-dynamic--chatgpt-format-candidate source query title model))
+                    (annotated-results (and decorated (propertize decorated
+                                             :source source
+                                             :title title
+                                             :url url
+                                             :search-url search-url
+                                             :query query))))
+          (when annotated-results
+          (funcall callback (list annotated-results)))
+          annotated-results)))))
+
+(consult-web-define-source "chatGPT"
+                           :narrow-char ?G
+                           :type 'dynamic
+                           :face 'consult-web-ai-source-face
+                           :request #'consult-web--chatgpt-fetch-results
+                           :preview-key consult-web-preview-key
+                           :on-preview #'consult-web--chatgpt-preview
+                           :on-return #'identity
+                           :on-callback #'consult-web--chatgpt-preview
+                           :search-history 'consult-web--search-history
+                           :selection-history 'consult-web--selection-history
+                           :enabled (lambda () (bound-and-true-p consult-web-openai-api-key))
+                           :group #'consult-web--group-function
+                           :sort t
+                           :static 'both
+                           :annotate nil
+                           )
+
+
+#+end_src
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-chatgpt' module
+
+(provide 'consult-web-chatgpt)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-chatgpt)
+;;; consult-web-chatgpt.el ends here
+#+end_src
+
+
 *** consult-line-multi
 :PROPERTIES:
 :header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-line-multi.el
@@ -3837,6 +4029,7 @@ FACE is the face to apply to TITLE"
                                                 :selection-history 'consult-web--selection-history
                                                 :preview-key 'consult-preview-key
                                                 :group #'consult-web--group-function
+                                                :enabled (lambda () consult-notes-org-headings-mode)
                                                 :static 'both
                                                 ))
 #+end_src
@@ -3858,6 +4051,7 @@ FACE is the face to apply to TITLE"
                                                             :preview-key 'consult-preview-key
                                                             :static 'both
                                                             :group #'consult-web--group-function
+                                                            :enabled (lambda () consult-notes-org-roam-mode)
                                                             :annotate nil
                                                             )))
 #+end_src
@@ -3971,6 +4165,9 @@ FACE is the face to apply to TITLE"
                            :static 'both
                            :transform (lambda (items &optional query) (mapcar (lambda (string)
                                                                 (consult-gh--repo-format string (or query "") t)) items))
+                           :enabled (lambda () (if (and (executable-find "gh")
+                                                   (fboundp 'consult-gh-search-repos))
+                                                   t nil))
                            :annotate nil
                            )
 #+end_src
@@ -4122,6 +4319,7 @@ FACE is the face to apply to TITLE"
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--grep-builder
                            :transform #'consult-web--grep-transform
+                           ;; :filter nil
                            :on-preview #'consult-web--grep-preview
                            :on-return #'identity
                            :on-callback #'consult-web--grep-callback
@@ -4133,6 +4331,9 @@ FACE is the face to apply to TITLE"
                            :sort t
                            :static 'both
                            :transform #'consult-web--ripgrep-transform
+                           :enabled (lambda () (if (and (executable-find "grep")
+                                                   (fboundp 'consult-grep))
+                                                   t nil))
                            :annotate nil
                            )
 #+end_src
@@ -4307,6 +4508,412 @@ FACE is the face to apply to TITLE"
 #+end_src
 
 
+*** consult-find
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-find.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-find.el --- Consulting Find Command -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.2
+;; Package-Requires: ((emacs "28.1") (consult "1.1") (consult-web "0.2"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+#+end_src
+**** custom variables
+#+begin_src emacs-lisp
+(defcustom consult-web-find-show-hidden-files t
+  "Whether to show hidden files in `consult-web-find'."
+  :type 'boolean)
+
+(defcustom consult-web-find-args  "find ."
+  "Command line arguments for find.
+
+Similar to `consult-find-args' bur for consult-web."
+  :type '(choice string (repeat (choice string sexp))))
+
+
+#+end_src
+**** transform
+#+begin_src emacs-lisp
+(defun consult-web--find-transform (candidates &optional query)
+  "Formats consult-web-find candidates.
+"
+  (mapcar (lambda (candidate)
+           (string-remove-prefix (file-truename default-directory) candidate))
+          candidates))
+#+end_src
+**** filter
+#+begin_src emacs-lisp
+(defun consult-web--find-filter (candidates &optional query)
+  "Formats consult-web-find candidates.
+"
+  (seq-filter (lambda (candidate) (not (string-match "^find:.*$" candidate nil nil))) candidates))
+
+#+end_src
+**** preview
+#+begin_src emacs-lisp
+
+(defun consult-web--find-preview (cand)
+  "Grep preview function."
+(funcall (consult--file-preview) 'preview cand))
+#+end_src
+
+**** callback
+#+begin_src emacs-lisp
+(defun consult-web--find-callback (cand)
+  "Find callback function."
+  (consult--file-action cand)
+  )
+#+end_src
+
+**** consult-web-find-builder
+#+begin_src emacs-lisp
+(cl-defun consult-web--find-builder (input &rest args &key callback &allow-other-keys)
+  "makes builder command line args for “grep”.
+"
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
+               (opts (car-safe opts))
+               (count (plist-get opts :count))
+               (hidden (if (plist-member opts :hidden) (plist-get opts :hidden) consult-web-find-show-hidden-files))
+               (ignore (plist-get opts :ignore))
+               (ignore (if ignore (format "%s" ignore)))
+               (dir (plist-get opts :dir))
+               (dir (if dir (file-truename (format "%s" dir))))
+               (count (or (and (integerp count) count)
+                          (and count (string-to-number (format "%s" count)))
+                          consult-web-default-count))
+               (default-directory (or dir default-directory))
+               (`(_ ,paths _) (consult--directory-prompt "" dir))
+               (paths (if dir
+                        (mapcar (lambda (path) (file-truename (concat dir path))) paths)
+                      paths))
+               (consult-find-args (concat consult-web-find-args
+                                          (if (not hidden) " -not -iwholename *./[a-z]*")
+                                          (if ignore (concat " -not -iwholename *" ignore "*"))))
+               )
+   (funcall (consult--find-make-builder paths) query)
+            ))
+#+end_src
+
+**** source
+#+begin_src emacs-lisp
+(consult-web-define-source "find"
+                           :narrow-char ?f
+                           :category 'file
+                           :type 'async
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--find-builder
+                           :transform #'consult-web--find-transform
+                           :filter #'consult-web--find-filter
+                           :on-preview #'consult-web--find-preview
+                           :on-return #'identity
+                           :on-callback #'consult-web--find-callback
+                           :preview-key consult-web-preview-key
+                           :search-history 'consult-web--search-history
+                           :selection-history 'consult-web--selection-history
+                           :group #'consult-web--group-function
+                           :sort t
+                           :static 'both
+                           :enabled (lambda () (if (executable-find "find") t nil))
+                           :annotate nil
+                           )
+#+end_src
+
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-find' module
+
+(provide 'consult-web-find)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-find)
+;;; consult-web-find.el ends here
+#+end_src
+
+
+*** consult-locate
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-locate.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-locate.el --- Consulting Locate Command -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.2
+;; Package-Requires: ((emacs "28.1") (consult "1.1") (consult-web "0.2"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+#+end_src
+
+**** custom variables
+#+begin_src emacs-lisp
+
+(defcustom consult-web-locate-limit consult-web-default-count
+  "Max number results for `consult-web-locate'
+
+This is passes to “-l” command line argument.
+"
+  :type 'integer)
+
+(defcustom consult-web-locate-args "locate -i"
+"Command line arguments for locate.
+
+Similar to `consult-locate-args' bur for consult-web."
+  :type '(choice string (repeat (choice string sexp))))
+
+#+end_src
+**** preview
+#+begin_src emacs-lisp
+
+(defun consult-web--locate-preview (cand)
+  "Grep preview function."
+(funcall (consult--file-preview) 'preview cand))
+#+end_src
+
+**** callback
+#+begin_src emacs-lisp
+(defun consult-web--locate-callback (cand)
+  "Find callback function."
+  (consult--file-action cand)
+  )
+#+end_src
+
+**** transform
+#+begin_src emacs-lisp
+(defun consult-web--find-transform (candidates &optional query)
+  "Formats consult-web-find candidates.
+"
+  (mapcar (lambda (candidate)
+           (string-remove-prefix (file-truename default-directory) candidate))
+          candidates))
+#+end_src
+
+
+
+**** filter
+#+begin_src emacs-lisp
+(defun consult-web--locate-filter (candidates &optional query)
+  "Formats consult-web-find candidates.
+"
+  (seq-filter (lambda (candidate) (not (string-match "^locate:.*$" candidate nil nil))) candidates))
+
+#+end_src
+**** consult-web-locate-builder
+#+begin_src emacs-lisp
+(cl-defun consult-web--locate-builder (input &rest args &key callback &allow-other-keys)
+  "makes builder command line args for “locate”.
+"
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
+               (opts (car-safe opts))
+               (count (plist-get opts :count))
+               (dir (plist-get opts :dir))
+               (dir (if dir (file-truename (format "%s" dir))))
+               (count (or (and (integerp count) count)
+                          (and count (string-to-number (format "%s" count)))
+                          consult-web-locate-limit))
+               (default-directory (or dir default-directory))
+               (consult-locate-args (concat consult-web-locate-args
+                                            (if count (format " -l %s" count))))
+               )
+
+   (funcall #'consult--locate-builder query)
+            ))
+#+end_src
+
+**** source
+#+begin_src emacs-lisp
+(consult-web-define-source "locate"
+                           :narrow-char ?f
+                           :category 'file
+                           :type 'async
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--locate-builder
+                           ;; :transform nil
+                           :filter #'consult-web--locate-filter
+                           :on-preview #'consult-web--locate-preview
+                           :on-return #'identity
+                           :on-callback #'consult-web--locate-callback
+                           :preview-key consult-web-preview-key
+                           :search-history 'consult-web--search-history
+                           :selection-history 'consult-web--selection-history
+                           :group #'consult-web--group-function
+                           :enabled (lambda () (if (executable-find "locate") t nil))
+                           :sort t
+                           :static 'both
+                           :annotate nil
+                           )
+#+end_src
+
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-locate' module
+
+(provide 'consult-web-locate)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-locate)
+;;; consult-web-locate.el ends here
+#+end_src
+
+
+
+*** consult-mdfind
+:PROPERTIES:
+:header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-locate.el
+:END:
+**** header
+#+begin_src emacs-lisp
+;;; consult-web-mdfind.el --- Consulting mdfind Command -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024 Armin Darvish
+
+;; Author: Armin Darvish
+;; Maintainer: Armin Darvish
+;; Created: 2024
+;; Version: 0.2
+;; Package-Requires: ((emacs "28.1") (consult "1.1") (consult-web "0.2"))
+;; Homepage: https://github.com/armindarvish/consult-web
+;; Keywords: convenience
+
+;;; Commentary:
+
+;;; Code:
+
+(require 'consult-web)
+#+end_src
+
+**** custom variables
+#+begin_src emacs-lisp
+
+(defcustom consult-web-mdfind-interpret t
+  "Whether to use the toggle -interpret in mdfind.
+See mdfind documents (e.g. “man mdfind”) for more details.
+"
+  :type 'boolean)
+
+(defcustom consult-web-mdfind-args "mdfind"
+"Command line arguments for mdfind.
+
+Similar to other command line args for consult but for mdfind.
+See `consult-locate-args' for example."
+  :type '(choice string (repeat (choice string sexp))))
+#+end_src
+**** preview
+#+begin_src emacs-lisp
+
+(defun consult-web--mdfind-preview (cand)
+  "Mdfind preview function."
+(funcall (consult--file-preview) 'preview cand))
+#+end_src
+
+**** callback
+#+begin_src emacs-lisp
+(defun consult-web--mdfind-callback (cand)
+  "Mdfind callback function."
+  (consult--file-action cand)
+  )
+#+end_src
+
+**** transform
+#+begin_src emacs-lisp
+(defun consult-web--find-transform (candidates &optional query)
+  "Formats consult-web-mdfind candidates.
+"
+  (mapcar (lambda (candidate)
+           (string-remove-prefix (file-truename default-directory) candidate))
+          candidates))
+#+end_src
+
+
+
+**** filter
+#+begin_src emacs-lisp
+(defun consult-web--mdfind-filter (candidates &optional query)
+  "Formats `consult-web-mdfind' candidates.
+"
+  ;; (seq-filter (lambda (candidate) (not (string-match "^mdfind:.*$" candidate nil nil))) candidates)
+)
+
+#+end_src
+**** consult-web-mdfind-builder
+#+begin_src emacs-lisp
+(cl-defun consult-web--mdfind-builder (input &rest args &key callback &allow-other-keys)
+  "makes builder command line args for “mdfind”.
+"
+  (pcase-let* ((`(,query . ,opts) (consult-web--split-command input args))
+               (opts (car-safe opts))
+               (count (plist-get opts :count))
+               (dir (plist-get opts :dir))
+               (dir (if dir (file-truename (format "%s" dir))))
+               (count (or (and (integerp count) count)
+                          (and count (string-to-number (format "%s" count)))
+                          consult-web-default-count))
+               (default-directory (or dir default-directory))
+               (consult-locate-args (concat consult-web-mdfind-args
+                                            (if consult-web-mdfind-interpret " -interpret")
+(if dir (format " -onlyin %s" dir)))))
+   (funcall #'consult--locate-builder query)
+            ))
+#+end_src
+
+**** source
+#+begin_src emacs-lisp
+(consult-web-define-source "mdfind"
+                           :narrow-char ?f
+                           :category 'file
+                           :type 'async
+                           :face 'consult-web-engine-source-face
+                           :request #'consult-web--mdfind-builder
+                           ;; :transform nil
+                           ;; :filter #'consult-web--mdfind-filter
+                           :on-preview #'consult-web--mdfind-preview
+                           :on-return #'identity
+                           :on-callback #'consult-web--mdfind-callback
+                           :preview-key consult-web-preview-key
+                           :search-history 'consult-web--search-history
+                           :selection-history 'consult-web--selection-history
+                           :group #'consult-web--group-function
+                           :enabled (lambda () (if (executable-find "mdfind") t nil))
+                           :sort t
+                           :static 'both
+                           :annotate nil
+                           )
+#+end_src
+
+**** provide and footer
+#+begin_src emacs-lisp
+;;; provide `consult-web-mdfind' module
+
+(provide 'consult-web-mdfind)
+
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-mdfind)
+;;; consult-web-mdfind.el ends here
+#+end_src
+
+
+
 *** consult-mu
 :PROPERTIES:
 :header-args:emacs-lisp: :results none :lexical t :mkdirp yes :link yes :tangle ./sources/consult-web-mu4e.el
@@ -4453,6 +5060,9 @@ cand
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
+                           :enabled (lambda () (if (and (executable-find "mu")
+                                                   (fboundp 'consult-mu))
+                                                   t nil))
                            :group #'consult-web--group-function
                            :sort t
                            :static 'both
@@ -4557,6 +5167,9 @@ cand
                            :static 'both
                            :transform (lambda (items &optional query) (remove nil (mapcar (lambda (string)
                                                                 (consult-web-notmuch--transformer string query)) items)))
+                           :enabled (lambda () (if (and (executable-find "notmuch")
+                                                   (fboundp 'consult-notmuch))
+                                                   t nil))
                            :annotate nil
                            )
 #+end_src
@@ -4686,6 +5299,9 @@ cand
                            :selection-history 'consult-web--selection-history
                            :group #'consult-web--group-function
                            ;; :group #'consult--prefix-group
+                           :enabled (lambda () (if (and (executable-find "rg")
+                                                   (fboundp 'consult-ripgrep))
+                                                   t nil))
                            :sort t
                            :static 'both
                            :transform #'consult-web--ripgrep-transform

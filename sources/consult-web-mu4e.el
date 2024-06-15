@@ -123,6 +123,9 @@ cand
                            :preview-key consult-web-preview-key
                            :search-history 'consult-web--search-history
                            :selection-history 'consult-web--selection-history
+                           :enabled (lambda () (if (and (executable-find "mu")
+                                                   (fboundp 'consult-mu))
+                                                   t nil))
                            :group #'consult-web--group-function
                            :sort t
                            :static 'both

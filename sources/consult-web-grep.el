@@ -103,6 +103,7 @@
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--grep-builder
                            :transform #'consult-web--grep-transform
+                           ;; :filter nil
                            :on-preview #'consult-web--grep-preview
                            :on-return #'identity
                            :on-callback #'consult-web--grep-callback
@@ -114,6 +115,9 @@
                            :sort t
                            :static 'both
                            :transform #'consult-web--ripgrep-transform
+                           :enabled (lambda () (if (and (executable-find "grep")
+                                                   (fboundp 'consult-grep))
+                                                   t nil))
                            :annotate nil
                            )
 

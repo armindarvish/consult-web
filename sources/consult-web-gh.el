@@ -79,6 +79,9 @@
                            :static 'both
                            :transform (lambda (items &optional query) (mapcar (lambda (string)
                                                                 (consult-gh--repo-format string (or query "") t)) items))
+                           :enabled (lambda () (if (and (executable-find "gh")
+                                                   (fboundp 'consult-gh-search-repos))
+                                                   t nil))
                            :annotate nil
                            )
 

@@ -1094,7 +1094,7 @@ it also sets `consult-web--override-group-by' if and argument
 for grouping is provided in options.
 "
   (pcase-let* ((`(,query . ,opts) (consult--command-split input))
-               (args (or args (list)))
+               (args (if (equal args '(nil)) nil args))
                )
     (if (and opts (listp opts) (> (length opts) 0))
         (progn
@@ -1478,6 +1478,7 @@ for use in a dynamically updated multi-source command
   (let* ((name (plist-get source :name))
          (builder (plist-get source :items))
          (transform (consult-web--get-source-prop name :transform))
+         (filter (consult-web--get-source-prop name :filter))
          (props (seq-drop-while (lambda (x) (not (keywordp x))) args))
          (proc)
          (proc-buf)
@@ -1497,7 +1498,7 @@ for use in a dynamically updated multi-source command
         (let* ((rest "")
                (proc-filter
                 (lambda (_ out)
-                  (let ((lines (split-string out "[\r\n]+")))
+                  (let* ((lines (split-string out "[\r\n]+")))
                     (if (not (cdr lines))
                         (setq rest (concat rest (car lines)))
                       (setcar lines (concat rest (car lines)))
@@ -1508,7 +1509,8 @@ for use in a dynamically updated multi-source command
                         (setcdr last nil)
                         (when lines
                           (setq lines (mapcar (lambda (line) (propertize line :source name :title line :query query)) lines))
-                          (when transform (setq lines (funcall transform lines query)))
+                          (when (and filter (functionp filter)) (setq lines (funcall filter lines query)))
+                          (when (and transform (functionp transform)) (setq lines (funcall transform lines query)))
                           (funcall async (consult-web--multi-propertize lines cat idx face))
                           (funcall async 'refresh))
                         )))))
@@ -1832,7 +1834,7 @@ Do not use this function directly, use `consult-web-define-source' macro
 
 ;;; Macros
 ;;;###autoload
-(cl-defmacro consult-web-define-source (source-name &rest args &key type request transform on-setup on-preview on-return on-exit state on-callback lookup static group narrow-char category search-history selection-history face annotate preview-key docstring enabled sort predicate &allow-other-keys)
+(cl-defmacro consult-web-define-source (source-name &rest args &key type request transform filter on-setup on-preview on-return on-exit state on-callback lookup static group narrow-char category search-history selection-history face annotate preview-key docstring enabled sort predicate &allow-other-keys)
   "Macro to make a consult-web-source for SOURCE-NAME.
 
 \* Makes
@@ -1853,7 +1855,9 @@ TYPE        (sync|async)    Whether the source is synchronous or asynchronous
 
 REQUEST     (function)      Fetch results from source
 
-TRANSFORM   (funciton)      Function to trnaform/format candidates
+TRANSFORM   (funciton)      Function to transform/format candidates
+
+FILTER      (funciton)      Function to filter candidates
 
 ON-SETUP    (function)      Setup action in `consult--read'
 
@@ -1952,6 +1956,15 @@ where the process returns a list of candiate strings, in which case TRANSFORM
 is applied to all candiates using `mapcar'.
 See `consult-web--grep-transform' for an example.
 
+FILTER is a function that takes a list of candidates (e.g. strings)
+and optionally the query string and returns a list of filtered
+strings. It's called with `(funcall filter candidates query)`.
+This is especially useful for async sources
+where the process returns a list of candiate strings, in which case FILTER
+is applied to all candidates using `seq-filter'.
+See `consult-web--locate-filter' for an example.
+
+
 
 ON-SETUP is a function called when setting up the minibuffer.
 This is used inside an state funciton by `consult--read.
@@ -2047,6 +2060,7 @@ variable that this macro creates for %s=SOURCE-NAME.
                                                                 :face ,face
                                                                 :request-func ,request
                                                                 :transform ,transform
+                                                                :filter ,filter
                                                                 :on-setup ,on-setup
                                                                 :on-preview (or ,on-preview #'consult-web--default-url-preview)
                                                                 :on-return (or ,on-return #'identity)

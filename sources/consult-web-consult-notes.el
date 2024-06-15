@@ -70,6 +70,7 @@
                                                 :selection-history 'consult-web--selection-history
                                                 :preview-key 'consult-preview-key
                                                 :group #'consult-web--group-function
+                                                :enabled (lambda () consult-notes-org-headings-mode)
                                                 :static 'both
                                                 ))
 
@@ -88,6 +89,7 @@
                                                             :preview-key 'consult-preview-key
                                                             :static 'both
                                                             :group #'consult-web--group-function
+                                                            :enabled (lambda () consult-notes-org-roam-mode)
                                                             :annotate nil
                                                             )))
 

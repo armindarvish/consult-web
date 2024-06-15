@@ -16,7 +16,8 @@
 (require 'consult-web)
 
 (setq consult-web-sources--all-modules-list
-      (list 'consult-web-bing
+      (list 'consult-web-apps
+            'consult-web-bing
             'consult-web-brave-autosuggest
             'consult-web-brave
             'consult-web-browser-history
@@ -26,6 +27,7 @@
             'consult-web-doi
             'consult-web-duckduckgo
             'consult-web-elfeed
+            'consult-web-find
             'consult-web-gh
             'consult-web-google
             'consult-web-google-autosuggest
@@ -34,6 +36,8 @@
             'consult-web-gptel
             'consult-web-invidious
             'consult-web-line-multi
+            'consult-web-locate
+            'consult-web-mdfind
             'consult-web-mu4e
             'consult-web-notes
             'consult-web-notmuch
