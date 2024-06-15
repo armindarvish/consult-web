@@ -3014,11 +3014,14 @@ If list is nil, loads `consult-web-sources-modules-to-load'and if that is nil as
 **** make process
 #+begin_src emacs-lisp
 (defun consult-web--apps-lauch-app (app &optional file)
-  ;; (start-process-shell-command "consult-web-apps" nil (consult-web--apps-cmd-args app file))
+  (let* ((app (if (listp app) app (list app)))
+        (file (if (listp file) file (list file)))
+        (cmds (remove nil (append (string-split consult-web-apps-open-command " ") app file)))
+        )
   (make-process :name "consult-web-apps"
                 :connection-type 'pipe
-                :command (list consult-web-apps-open-command app)
-                ))
+                :command cmds
+                )))
 #+end_src
 **** preview
 #+begin_src emacs-lisp

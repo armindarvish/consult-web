@@ -60,7 +60,7 @@
                                                "/usr/share"
                                                "/usr/local/share"))))
      (setq consult-web-apps-regexp-pattern ".*\\.desktop$")
-     (setq consult-web-apps-open-command "")
+     (setq consult-web-apps-open-command "gtk-launch")
     )
 )
 
@@ -70,9 +70,12 @@
           (shell-quote-argument app)
           (if (and file (file-exists-p (file-truename file))) (shell-quote-argument file))))
 
-(defun consult-web--apps-lauch-app (exec &optional file)
-  (start-process-shell-command "consult-web-apps" nil (concat exec file)
-                               ))
+(defun consult-web--apps-lauch-app (app &optional file)
+  ;; (start-process-shell-command "consult-web-apps" nil (consult-web--apps-cmd-args app file))
+  (make-process :name "consult-web-apps"
+                :connection-type 'pipe
+                :command (list consult-web-apps-open-command app)
+                ))
 
 (defun consult-web--apps-preview (cand)
   "Mdfind preview function."
@@ -80,7 +83,8 @@
 
 (defun consult-web--apps-callback (cand)
   "Mdfind callback function."
-  (let* ((app (get-text-property 0 :exec cand)))
+  (let* ((path (get-text-property 0 :path cand))
+         (app (and (stringp path) (file-exists-p path) (file-name-nondirectory path) )))
     (funcall consult-web-apps-default-launch-function app)
   ))
 
