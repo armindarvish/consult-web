@@ -2994,7 +2994,6 @@ If list is nil, loads `consult-web-sources-modules-to-load'and if that is nil as
 **** open process
 #+begin_src emacs-lisp
 (defun consult-web--apps-lauch-app (app &optional file)
-  (print  (consult-web--apps-cmd-args app file))
   (start-process-shell-command "consult-web-apps" nil (consult-web--apps-cmd-args app file)
                                ))
 #+end_src
@@ -3023,14 +3022,18 @@ Files are entries from `consult-web--apps-list-apps'.
 QUERY is the query input from the user"
   (let* ((frame-width-percent (floor (* (frame-width) 0.1)))
          (source (and (stringp source) (propertize source 'face 'consult-web-source-face)))
-         (path  (and (stringp path) (propertize path 'face 'consult-web-path-face)))
+         (directory (and path (file-name-directory path)))
+         (directory (and (stringp directory) (propertize directory 'face 'consult-web-domain-face)))
+         (filename (and path (file-name-nondirectory path)))
+         (filename (and (stringp filename) (propertize filename 'face 'consult-web-path-face)))
          (match-str (and (stringp query) (consult--split-escaped query) nil))
          (face (or (consult-web--get-source-prop source :face) face 'consult-web-files-source-face))
          (title-str (propertize title 'face face))
          (title-str (consult-web--set-string-width title-str (* 4 frame-width-percent)))
          (str (concat title-str
+                      (when filename (concat "\t" (when directory directory) filename))
                       (when source (concat "\t" source))
-                      (when path (concat "\t" path)))))
+                      )))
      (if consult-web-highlight-matches
         (cond
          ((listp match-str)
