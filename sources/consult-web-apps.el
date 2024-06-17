@@ -130,7 +130,8 @@ in `consult-web-apps-paths'.
                  consult-web-apps-paths)))
     (when (listp paths)
       (cl-remove-duplicates (apply #'append (mapcar (lambda (path)
-                          (directory-files path t consult-web-apps-regexp-pattern t)) paths))))))
+                          (when (file-exists-p path)
+                          (directory-files path t consult-web-apps-regexp-pattern t))) paths))))))
 
 (defun consult-web--apps-parse-app-file (file)
   (pcase system-type
