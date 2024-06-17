@@ -22,7 +22,7 @@
 "
   :type '(repeat :tag "List of paths" directory))
 
-(defcustom consult-web-apps-open-command nil
+(defcustom consult-web-apps-open-command-args nil
   "Command line args to open an application"
   :type 'string)
 
@@ -37,9 +37,9 @@
 
 (pcase system-type
   ('darwin
-   (setq consult-web-apps-paths (list "/Applications" "/Applications/Utilities/" "/System/Applications/" "/System/Applications/Utilities/"))
+   (setq consult-web-apps-paths (append (file-expand-wildcards "/Applications/Adobe*") (list "/Applications" "/Applications/Utilities/" "/System/Applications/" "/System/Applications/Utilities/")))
    (setq consult-web-apps-regexp-pattern ".*\\.app$")
-   (setq consult-web-apps-open-command "open -a")
+   (setq consult-web-apps-open-command-args "open -a")
    )
    ('gnu/linux
     (setq consult-web-apps-xdg-data-home (if (fboundp 'xdg-data-home) (xdg-data-home)
@@ -60,21 +60,19 @@
                                                "/usr/share"
                                                "/usr/local/share"))))
      (setq consult-web-apps-regexp-pattern ".*\\.desktop$")
-     (setq consult-web-apps-open-command "gtk-launch")
+     (setq consult-web-apps-open-command-args "gtk-launch")
     )
 )
 
 (defun consult-web--apps-cmd-args (app &optional file)
-  (concat consult-web-apps-open-command
-          " "
-          (shell-quote-argument app)
-          (if (and file (file-exists-p (file-truename file))) (shell-quote-argument file))))
+  (append (consult--build-args consult-web-apps-open-command-args)
+          (list (format "%s" app))
+          (if (and file (file-exists-p (file-truename file))) (list (format "%s" file)))))
 
 (defun consult-web--apps-lauch-app (app &optional file)
   (let* ((name (concat "consult-web-" (file-name-base app)))
-         (cmds (remove nil (string-split (consult-web--apps-cmd-args app file)))
-         ))
-  (make-process :name name
+         (cmds (consult-web--apps-cmd-args app file)))
+    (make-process :name name
                 :connection-type 'pipe
                 :command cmds
                 )))
@@ -197,7 +195,7 @@ in `consult-web-apps-paths'.
                              consult-web-default-count))
                (files (consult-web--apps-get-desktop-apps)))
    (mapcar (lambda (file)
-             (pcase-let* ((source "Applications")
+             (pcase-let* ((source "Apps")
                           (`(,name ,comment ,exec ,visible) (consult-web--apps-parse-app-file file))
                     (title (or name (file-name-base file) ""))
                     (app (and (stringp file) (file-exists-p file ) (file-name-nondirectory file)))
@@ -219,7 +217,7 @@ in `consult-web-apps-paths'.
    )
  ))
 
-(consult-web-define-source "Applications"
+(consult-web-define-source "Apps"
                            :narrow-char ?a
                            :type 'sync
                            :request #'consult-web--apps-list-apps
