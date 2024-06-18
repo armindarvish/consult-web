@@ -37,7 +37,7 @@
 
 (pcase system-type
   ('darwin
-   (setq consult-web-apps-paths (append (file-expand-wildcards "/Applications/Adobe*") (list "/Applications" "/Applications/Utilities/" "/System/Applications/" "/System/Applications/Utilities/")))
+   (setq consult-web-apps-paths (append (file-expand-wildcards "/Applications/Adobe*") (list "/Applications" "/Applications/Utilities/" "/System/Applications/" "/System/Applications/Utilities/" "~/Applications/")))
    (setq consult-web-apps-regexp-pattern ".*\\.app$")
    (setq consult-web-apps-open-command-args "open -a")
    )
