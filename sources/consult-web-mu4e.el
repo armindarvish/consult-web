@@ -136,5 +136,5 @@ cand
 
 (provide 'consult-web-mu4e)
 
-(add-to-list 'consult-web-sources-modules-to-load 'consult-web-gh)
+(add-to-list 'consult-web-sources-modules-to-load 'consult-web-mu4e)
 ;;; consult-web-mu4e.el ends here

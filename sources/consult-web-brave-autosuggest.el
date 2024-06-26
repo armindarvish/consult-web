@@ -20,7 +20,7 @@
   "Return the string of CAND with no properties
 "
 (when (stringp cand)
-  (substring-no-properties (string-trim cand))))
+  (substring-no-properties (string-trim (string-trim-left cand "#")))))
 
 (defvar consult-web-brave-autosuggest-api-url "https://api.search.brave.com/res/v1/suggest/search")
 
@@ -96,13 +96,13 @@ See URL `https://brave.com/search/api/' for more info"
                            :request #'consult-web--brave-autosuggest-fetch-results
                            :group #'consult-web--group-function
                            :on-preview #'ignore
-                           :on-return #'consult-web--brave-autosuggest-return
-                           :on-callback #'string-trim
+                           :on-return #'identity
+                           :on-callback #'identity
                            :search-history 'consult-web--search-history
                            :selection-history t
                            :enabled (lambda () (bound-and-true-p consult-web-brave-autosuggest-api-key))
                            :sort t
-                           :static t
+                           :static nil
                            )
 
 ;;; provide `consult-web-brave-autosuggest' module

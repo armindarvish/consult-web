@@ -1793,16 +1793,14 @@ instead."
                                               :prompt prompt
                                               :sort sort
                                               :history selection-history-var))
+         (source  (plist-get (cdr selected) :name))
          (selected (cond
                     ((consp selected) (car-safe selected))
                     (t selected)))
-         (source (get-text-property 0 :source selected))
-         )
-    (unless no-callback
-      (if source
-          (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-callback) selected)))
-    selected)
-  )
+         (callback-func (and (not no-callback) source (consult-web--get-source-prop source :on-callback))))
+    (when (functionp callback-func)
+      (funcall callback-func selected))
+    selected))
 
 (defun consult-web--call-dynamic-command (initial no-callback args source-name request category face lookup search-history-var selection-history-var preview-key sort)
   "Internal function to make dynamic `consult--read' command.
@@ -1820,15 +1818,15 @@ Do not use this function directly, use `consult-web-define-source' macro
                                       :initial (consult--async-split-initial initial)
                                       :sort sort
                                       ))
+         (source  (plist-get (cdr selected) :name))
          (selected (cond
                     ((consp selected) (car selected))
                     (t selected)))
-         (source (get-text-property 0 :source selected))
-         (title (get-text-property 0 :title selected)))
+         (title (get-text-property 0 :title selected))
+         (callback-func (and (not no-callback) source (consult-web--get-source-prop source :on-callback))))
     (add-to-history selection-history-var title)
-    (unless no-callback
-      (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-callback) selected)
-      )
+    (when (functionp callback-func)
+      (funcall callback-func selected))
     selected
     ))
 
@@ -2235,17 +2233,23 @@ here: URL `https://github.com/minad/consult'."
          (sources (or sources consult-web-dynamic-sources))
          (sources (remove nil (mapcar (lambda (source) (plist-get (cdr (assoc source consult-web-sources-alist)) :source)) sources)))
          (prompt (concat "[" (propertize "consult-web-multi" 'face 'consult-web-prompt-face) "]" " Search:  "))
-         (selected
-          (car-safe (consult-web--multi-dynamic
-                     sources
-                     args
-                     :prompt prompt
-                     :sort t
-                     :history '(:input consult-web--search-history)
-                     :initial (consult--async-split-initial initial)
-                     )))
-         (source (get-text-property 0 :source selected)))
-    (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-callback) selected)
+         (selected (consult-web--multi-dynamic
+                    sources
+                    args
+                    :prompt prompt
+                    :sort t
+                    :history '(:input consult-web--search-history)
+                    :initial (consult--async-split-initial initial)
+                    ))
+         (source  (plist-get (cdr selected) :name))
+         (selected (cond
+                    ((consp selected) (car-safe selected))
+                    (t selected)))
+         (callback-func (and (not no-callback) source (consult-web--get-source-prop source :on-callback))))
+
+    (when (functionp callback-func)
+      (funcall callback-func selected))
+
     selected
     ))
 
@@ -2267,16 +2271,22 @@ without any callback action.
          (sources (remove nil (mapcar (lambda (source) (consult-web--get-source-prop source :source))  sources)))
          (prompt (concat "[" (propertize "consult-web-static" 'face 'consult-web-prompt-face) "]" " Search:  "))
          (selected
-          (car-safe (consult-web--multi-static sources
-                                               input
-                                               args
-                                               :prompt prompt
-                                               :history 'consult-web--selection-history
-                                               :sort t
-                                               )))
-         (source (get-text-property 0 :source selected)))
-        (unless no-callback
-          (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-callback) selected))
+          (consult-web--multi-static sources
+                                     input
+                                     args
+                                     :prompt prompt
+                                     :history 'consult-web--selection-history
+                                     :sort t
+                                     ))
+         (source  (plist-get (cdr selected) :name))
+         (selected (cond
+                    ((consp selected) (car-safe selected))
+                    (t selected)))
+         (callback-func (and (not no-callback) source (consult-web--get-source-prop source :on-callback))))
+
+    (when (functionp callback-func)
+      (funcall callback-func selected))
+
     selected
     ))
 
@@ -2298,17 +2308,23 @@ Refer to `consult-web-multi' for more details."
          (sources (or sources consult-web-scholar-sources))
          (sources (remove nil (mapcar (lambda (source) (plist-get (cdr (assoc source consult-web-sources-alist)) :source)) sources)))
          (prompt (concat "[" (propertize "consult-web-scholar" 'face 'consult-web-prompt-face) "]" " Search:  "))
-         (selected
-          (car-safe (consult-web--multi-dynamic
-                     sources
-                     args
-                     :prompt prompt
-                     :sort t
-                     :history '(:input consult-web--search-history)
-                     :initial (consult--async-split-initial initial)
-                     )))
-         (source (get-text-property 0 :source selected)))
-    (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-callback) selected)
+         (selected (consult-web--multi-dynamic
+                    sources
+                    args
+                    :prompt prompt
+                    :sort t
+                    :history '(:input consult-web--search-history)
+                    :initial (consult--async-split-initial initial)
+                    ))
+         (source  (plist-get (cdr selected) :name))
+         (selected (cond
+                    ((consp selected) (car-safe selected))
+                    (t selected)))
+         (callback-func (and (not no-callback) source (consult-web--get-source-prop source :on-callback))))
+
+    (when (functionp callback-func)
+      (funcall callback-func selected))
+
     selected
     ))
 
@@ -2333,17 +2349,23 @@ the minibuffer. See `consult-web-multi' for more details."
          (sources (or sources consult-web-omni-sources))
          (sources (remove nil (mapcar (lambda (source) (plist-get (cdr (assoc source consult-web-sources-alist)) :source)) sources)))
          (prompt (concat "[" (propertize "consult-web-omni" 'face 'consult-web-prompt-face) "]" " Search:  "))
-         (selected
-          (car-safe (consult-web--multi-dynamic
+         (selected (consult-web--multi-dynamic
                      sources
                      args
                      :prompt prompt
                      :sort t
                      :history '(:input consult-web--search-history)
                      :initial (consult--async-split-initial initial)
-                     )))
-         (source (get-text-property 0 :source selected)))
-    (funcall (plist-get (cdr (assoc source consult-web-sources-alist)) :on-callback) selected)
+                     ))
+         (source  (plist-get (cdr selected) :name))
+         (selected (cond
+                    ((consp selected) (car-safe selected))
+                    (t selected)))
+         (callback-func (and (not no-callback) source (consult-web--get-source-prop source :on-callback))))
+
+    (when (functionp callback-func)
+      (funcall callback-func selected))
+
     selected
     ))
 

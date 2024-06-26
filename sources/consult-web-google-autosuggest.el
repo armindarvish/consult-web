@@ -16,6 +16,12 @@
 
 (require 'consult-web)
 
+(defun consult-web--google-autosuggest-return (cand)
+  "Return the string of CAND with no properties
+"
+(when (stringp cand)
+  (substring-no-properties (string-trim (string-trim-left cand "#")))))
+
 (defvar consult-web-google-autosuggest-api-url "http://suggestqueries.google.com/complete/search")
 
 (cl-defun consult-web--google-autosuggest-fetch-results (input &rest args &key callback &allow-other-keys)
@@ -73,14 +79,14 @@ Uses `consult-web-google-autosuggest-api-url' as autosuggest api url."
                            :face 'consult-web-engine-source-face
                            :request #'consult-web--google-autosuggest-fetch-results
                            :on-preview #'ignore
-                           :on-return #'identity
+                           :on-return #'consult-web--google-autosuggest-return
                            :on-callback #'string-trim
                            :search-history 'consult-web--search-history
                            :selection-history t
                            :group #'consult-web--group-function
                            :enabled (lambda () (boundp consult-web-google-autosuggest-api-url))
                            :sort t
-                           :static t
+                           :static nil
                            )
 
 ;;; provide `consult-web-google-autosuggest' module
