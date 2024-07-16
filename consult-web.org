@@ -3918,7 +3918,7 @@ COUNT is passed as count in query parameters.
          (page (or (and (integerp page) page)
                    (and page (string-to-number (format "%s" page)))
                    consult-web-default-count))
-         (count (max count 1))
+         (count (min (max count 1) 25))
          (page (* count page))
          (params `(("query" . ,(replace-regexp-in-string " " "+" input))
                    ("count" . ,(format "%s" count))
