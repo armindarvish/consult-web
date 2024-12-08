@@ -1263,6 +1263,7 @@ DOCSTRING is the docstring for the function that is returned."
                     table)
            table)))))))
 
+;;;###autoload
 (cl-defun consult-web--make-source-from-consult-source (consult-source &rest args &key request format on-preview on-return state on-callback group narrow-char category dynamic search-history selection-history face annotate preview-key docstring &allow-other-keys)
 "Makes a consult-web source from a consult source, CONSULT-SOURCE.
 All othe input variables are passed to `consult-web-define-source'
@@ -1301,6 +1302,7 @@ macro. See `consult-web-define-source' for more details"
   )
 
 ;;; Frontend Interactive Commands
+;;;###autoload
 (defun consult-web-multi (&optional input sources no-callback &rest args)
   "Interactive “multi-source search”
 
@@ -1332,6 +1334,7 @@ any callback action.
     (car selected)
     ))
 
+;;;###autoload
 (defun consult-web-dynamic (&optional initial sources no-callback &rest args)
   "Interactive “multi-source dynamic search”
 
@@ -1401,6 +1404,7 @@ and the official manual of consult, here: URL `https://github.com/minad/consult'
     selected
     ))
 
+;;;###autoload
 (defun consult-web-scholar (&optional initial sources no-callback &rest args)
   "Interactive “multi-source acadmic literature” search
 
@@ -1442,6 +1446,7 @@ flattend list of sources."
 
  consult-web-omni-sources)))
 
+;;;###autoload
 (defun consult-web-omni (&optional input sources no-callback &rest args)
 "Interactive “multi-source omni” search.
 This is for using combination of web and local sources defined in
@@ -1475,6 +1480,7 @@ any callback action."
     (car selected)
     ))
 
+;;;###autoload
 (defun consult-web-dynamic-omni (&optional initial sources no-callback &rest args)
   "Interactive “multi-source and dynamic omni search”
 This is for using combination of web and local sources defined in
@@ -1505,6 +1511,7 @@ the minibuffer. See `consult-web-dynamic' for more details."
     selected
     ))
 
+;;;###autoload
 (defun consult-web (&rest args)
 "Wrapper function that calls the function in `consult-web-default-interactive-command'.
 
