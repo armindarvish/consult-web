@@ -12,7 +12,7 @@
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -1730,7 +1730,7 @@ This is for conviniece to call the favorite consult-web interactive command."
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "27.1") (consult "0.34") (consult-web 0.1))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -1910,7 +1910,7 @@ Gets the preview function from `consult-web-sources-alist'."
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
 
@@ -1982,7 +1982,7 @@ If list is nil, loads `consult-web-sources-modules-to-load'and if that is nil as
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -2139,7 +2139,7 @@ See URL `https://openai.com/product' and URL `https://platform.openai.com/docs/i
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -2251,7 +2251,7 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -2361,7 +2361,7 @@ PAGE is passed as page in query paramters.
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -2472,7 +2472,7 @@ See URL `https://brave.com/search/api/' for more info"
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -2601,7 +2601,7 @@ TABLE is a hashtable from `consult-web--line-multi-fetch-results'."
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -2661,7 +2661,7 @@ TABLE is a hashtable from `consult-web--line-multi-fetch-results'."
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -2778,7 +2778,7 @@ TABLE is a hashtable from `consult-web--line-multi-fetch-results'."
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -2867,7 +2867,7 @@ TABLE is a hashtable from `consult-web--line-multi-fetch-results'."
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web/blob/main/consult-web-sources
 ;; Keywords: convenience
@@ -3054,7 +3054,7 @@ Uses `elfeed-show-entry'."
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -3180,7 +3180,7 @@ Refer to URL `https://programmablesearchengine.google.com/about/' and `https://d
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -3273,7 +3273,7 @@ Uses `consult-web-google-autosuggest-api-url' as autosuggest api url."
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -3469,7 +3469,7 @@ The preview buffer is from `consult-web--gptel-response-preview'."
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -3564,7 +3564,7 @@ The preview buffer is from `consult-web--gptel-response-preview'."
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -3816,7 +3816,7 @@ DATABASE is passed as DB to `consult-web--pubmed-esearch-fetch-results' and `con
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -4024,7 +4024,7 @@ COUNT is passed as count in query parameters.
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -4138,7 +4138,7 @@ See URL `https://api.stackexchange.com/' for more info.
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
@@ -4237,7 +4237,7 @@ PAGEis passed as sroffset in query paramters."
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: 0.1
+;; Version: "0.1"
 ;; Package-Requires: ((emacs "28.1") (consult "1.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
