@@ -15,14 +15,10 @@
 ;;; Code:
 
 ;;; Requirements
-(eval-when-compile
 (require 'consult)
 (require 'url)
-(when (featurep 'json)
-  (require 'json))
-(when (featurep 'request)
-  (require 'request))
-)
+(require 'json)
+(require 'request)
 
 ;;; Group
 (defgroup consult-web nil

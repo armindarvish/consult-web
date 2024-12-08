@@ -26,14 +26,10 @@
 ** Requirements
 #+begin_src emacs-lisp
 ;;; Requirements
-(eval-when-compile
 (require 'consult)
 (require 'url)
-(when (featurep 'json)
-  (require 'json))
-(when (featurep 'request)
-  (require 'request))
-)
+(require 'json)
+(require 'request)
 #+end_src
 
 
