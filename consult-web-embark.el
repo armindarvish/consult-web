@@ -6,8 +6,8 @@
 ;; Author: Armin Darvish
 ;; Maintainer: Armin Darvish
 ;; Created: 2024
-;; Version: "0.1"
-;; Package-Requires: ((emacs "27.1") (consult "0.34") (consult-web 0.1))
+;; Version: 0.1
+;; Package-Requires: ((emacs "27.1") (consult "0.34") (consult-web "0.1"))
 ;; Homepage: https://github.com/armindarvish/consult-web
 ;; Keywords: convenience
 
